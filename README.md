@@ -3,7 +3,7 @@
 A re-implementation of the [Kienholz et al., 2014](https://tc.copernicus.org/articles/8/503/2014/) algorithm in python.
 
 This algorithm has been implemented succesfully [in OGGM](https://docs.oggm.org/en/stable/flowlines.html) since several years already. This code, however, has a few drawbacks:
-- it requires OGGM to be installed to run
+- it requires OGGM to be installed to run.
 - the OGGM developpers have made certain choices with respect to algorithm design and grid handling which made sense for the model, a bit less for the centerline tool
 - the agorithm code is a bit hidden in the large OGGM codebase, maybe impeding innovation and adaptations from the community.
 
