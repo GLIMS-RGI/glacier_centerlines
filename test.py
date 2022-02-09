@@ -20,6 +20,7 @@ import geopandas as gpd
 import shapely as shp
 import scipy as sc
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 #--------------------------------------
 
@@ -49,12 +50,13 @@ else:
     raise ValueError('Projections do not match.')
     
 
-
 # from shapely.geometry import mapping
 tif_clipped = tif.rio.clip(crop_extent.geometry.apply(shp.geometry.mapping),
-                                      # This is needed if your GDF is in a diff CRS than the raster data
                                       crop_extent.crs)
 f, ax = plt.subplots(figsize=(8, 10))
+
+# assign some value to outside crop: e.g. 0 (default number is too large)
+tif_clipped.values[0][tif_clipped.values[0] > 1500] = 0
 tif_clipped.plot(ax=ax)
 ax.set(title="Raster Layer Cropped to Geodataframe Extent")
 ax.set_axis_off()
