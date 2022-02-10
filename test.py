@@ -17,7 +17,7 @@ scipy for the routing algorithm (as OGGM does)
 # import libraries --------------------
 import rioxarray as rio
 import geopandas as gpd
-import shapely as shp
+import shapely.geometry as shpg
 import scipy as sc
 import os
 import numpy as np
@@ -50,8 +50,8 @@ else:
     raise ValueError('Projections do not match.')
     
 
-# from shapely.geometry import mapping
-tif_clipped = tif.rio.clip(crop_extent.geometry.apply(shp.geometry.mapping),
+## crop with buffer (I am not sure about the units of the buffer, i assume meters)
+tif_clipped = tif.rio.clip(crop_extent.geometry.buffer(200).apply(shpg.mapping),
                                       crop_extent.crs)
 f, ax = plt.subplots(figsize=(8, 10))
 
@@ -61,3 +61,19 @@ tif_clipped.plot(ax=ax)
 ax.set(title="Raster Layer Cropped to Geodataframe Extent")
 ax.set_axis_off()
 plt.show()
+
+#-----------------
+# compute mask as in https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
+from rasterio.mask import mask as riomask
+import rasterio
+
+# rename objects to fit oggm names 
+dem_data = rasterio.open(os.path.join(data_path, tif_file))
+
+geometry = crop_extent.geometry
+
+masked_dem, _ = riomask(dem_data, [shpg.mapping(geometry)], filled=False)
+glacier_mask = ~masked_dem[0, ...].mask
+
+# --> it seems its all mask points are 0 :( 
+# even though dem_data.crs = geometry.crs
