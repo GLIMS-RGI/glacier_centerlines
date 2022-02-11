@@ -4,7 +4,7 @@ assume that the DEM and the outlines are in a cartesian projection (units: m)
 open the geotiff with rioxarray
 start with one outline, and crop the DEM to the outline + a few grid point
 compute a mask of the glacier as in: https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
-use the OGGM code to compute the heads, terminus, but: do not simplify geometries as done in OGGM. I would really try to see if its possible to work and compute glacier heads and terminus in the native geometry resolution. OGGM code: https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
+use the OGGM code to compute the heads, terminus, but: do not simplify geometries as done in OGGM. I would really try to see if its possible to work and compute glacier heads and terminus in the native geometry resolution. OGGM code:     
 I don't think there is a need for the OGGM Centerline object. All calculations should be doable with shapely only.
 
 The tools you will need:
@@ -61,19 +61,3 @@ tif_clipped.plot(ax=ax)
 ax.set(title="Raster Layer Cropped to Geodataframe Extent")
 ax.set_axis_off()
 plt.show()
-
-#-----------------
-# compute mask as in https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
-from rasterio.mask import mask as riomask
-import rasterio
-
-# rename objects to fit oggm names 
-dem_data = rasterio.open(os.path.join(data_path, tif_file))
-
-geometry = crop_extent.geometry
-
-masked_dem, _ = riomask(dem_data, [shpg.mapping(geometry)], filled=False)
-glacier_mask = ~masked_dem[0, ...].mask
-
-# --> it seems its all mask points are 0 :( 
-# even though dem_data.crs = geometry.crs
