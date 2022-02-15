@@ -1,6 +1,6 @@
 """ Workflow:
 This scripit does cut and plot a DEM correcponding to each polygon (glacier) 
-given a shapefile and a DEM.
+given a shapefile and a DEM. In my way.
 """
 # import libraries --------------------
 import rioxarray as rio
