@@ -39,7 +39,6 @@ else:
 for i in np.arange(len(crop_extent)): 
     # start with one outline, and crop the DEM to the outline + a few grid point
     crp1 = crop_extent.iloc[[i]]
-    
     ## crop with buffer (I am not sure about the units of the buffer, i assume meters)
     dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
                                crop_extent.crs)
@@ -51,4 +50,97 @@ for i in np.arange(len(crop_extent)):
     dem_clipped.plot(ax=ax)
     ax.set(title="Raster Layer Cropped to Geodataframe Extent")
     plt.show()
+ 
+# Compute heads and tails
+## start with the weighting function:
+## https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
+crop_extent.geometry.exterior[0].coords[0]
+
+from osgeo import gdal
+
+driver = gdal.GetDriverByName('GTiff')
+#filename = "/home/zeito/pyqgis_data/aleatorio.tif" #path to raster
+dataset = gdal.Open(os.path.join(data_path, dem_file))
+band = dataset.GetRasterBand(1)
+
+cols = dataset.RasterXSize
+rows = dataset.RasterYSize
+
+#map pixel/line coordinates into georeferenced space
+transform = dataset.GetGeoTransform()
+
+xOrigin = transform[0]
+yOrigin = transform[3]
+pixelWidth = transform[1]
+pixelHeight = -transform[5]
+
+data = band.ReadAsArray(0, 0, cols, rows)
+
+
+def profile(points_list):
+    """
+
+    Parameters
+    ----------
+    points_list : list (?) with latlon.
+
+    Returns
+    -------
+    profile distance-altitude
+
+    """
+    alt = np.zeros(1)
+    dist = np.zeros(1)
+    dumdist=0
+    
+    
+    for point in points_list:
+        col = int((point[0] - xOrigin) / pixelWidth)
+        row = int((yOrigin - point[1] ) / pixelHeight)
+    
+        alt = np.append(alt, data[row][col])   
+    
+    # distance along line
+    # Distance between  2 points
+    #a=shpg.Point(points_list[0])
+    #a.distance(shpg.Point(points_list[1]))
+    
+    np.append(points_list, points_list[0])
+    for i in np.arange(len(points_list)):
+        i=int(i)
+        a=shpg.Point(points_list[i])
+        if i == len(points_list)-1:
+            d = a.distance(shpg.Point(points_list[0]))
+        else:
+            d = a.distance(shpg.Point(points_list[i+1]))
+        dumdist = dumdist + d
+        dist = np.append(dist, dumdist)   
+    
+    #remove dummy 0 in the begining
+    alt = alt[1:]
+    
+    #remove repeated last value 
+    #alt = alt[1:]
+    
+    dist = dist[1:]
+     
+    return dist, alt
+
+fig = list()
+for i in np.arange(len(crop_extent)):
+    points_list=crop_extent.geometry.exterior[i].coords #list of X,Y coordinates
+    prof = profile(points_list)
+
+    plt.plot(prof[0], prof[1])
+    plt.show()
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
