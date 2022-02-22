@@ -29,3 +29,82 @@ def nicenumber(number, binsize, lower=False):
         return e * binsize
     else:
         return (e + 1) * binsize
+    
+def clip_scalar(value, vmin, vmax):
+    """A faster numpy.clip ON SCALARS ONLY.
+    See https://github.com/numpy/numpy/issues/14281
+    """
+    return vmin if value < vmin else vmax if value > vmax else value
+
+def _filter_heads(heads, heads_height, radius, polygon):
+    """Filter the head candidates following Kienholz et al. (2014), Ch. 4.1.2
+    Parameters
+    ----------
+    heads : list of shapely.geometry.Point instances
+        The heads to filter out (in raster coordinates).
+    heads_height : list
+        The heads altitudes.
+    radius : float
+        The radius around each head to search for potential challengers
+    polygon : shapely.geometry.Polygon class instance
+        The glacier geometry (in raster coordinates).
+    Returns
+    -------
+    a list of shapely.geometry.Point instances with the "bad ones" removed
+    """
+
+    #heads = copy.copy(heads)
+    #heads_height = copy.copy(heads_height)
+
+    i = 0
+    # I think a "while" here is ok: we remove the heads forwards only
+    while i < len(heads):
+        head = heads[i]
+        pbuffer = head.buffer(radius)
+        inter_poly = pbuffer.intersection(polygon.exterior)
+        if inter_poly.type in ['MultiPolygon',
+                               'GeometryCollection',
+                               'MultiLineString']:
+            #  In the case of a junction point, we have to do a check
+            # http://lists.gispython.org/pipermail/community/
+            # 2015-January/003357.html
+            if inter_poly.type == 'MultiLineString':
+                inter_poly = shapely.ops.linemerge(inter_poly)
+
+            if inter_poly.type != 'LineString':
+                # keep the local polygon only
+                for sub_poly in inter_poly.geoms:
+                    if sub_poly.intersects(head):
+                        inter_poly = sub_poly
+                        break
+        elif inter_poly.type == 'LineString':
+            inter_poly = shpg.Polygon(np.asarray(inter_poly.xy).T)
+        elif inter_poly.type == 'Polygon':
+            pass
+        else:
+            extext = ('Geometry collection not expected: '
+                      '{}'.format(inter_poly.type))
+            #raise InvalidGeometryError(extext)
+
+        # Find other points in radius and in polygon
+        _heads = [head]
+        _z = [heads_height[i]]
+        for op, z in zip(heads[i+1:], heads_height[i+1:]):
+            if inter_poly.intersects(op):
+                _heads.append(op)
+                _z.append(z)
+
+        # If alone, go to the next point
+        if len(_heads) == 1:
+            i += 1
+            continue
+
+        # If not, keep the highest
+        _w = np.argmax(_z)
+
+        for head in _heads:
+            if not (head is _heads[_w]):
+                heads_height = np.delete(heads_height, heads.index(head))
+                heads.remove(head)
+
+    return heads, heads_height
