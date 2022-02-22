@@ -1,6 +1,10 @@
 """ Workflow:
 This scripit does cut and plot a DEM correcponding to each polygon (glacier) 
-given a shapefile and a DEM. In my way.
+given a shapefile and a DEM.
+Then the terminus is found following 
+## https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
+and https://tc.copernicus.org/articles/8/503/2014/
+https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
 """
 # import libraries --------------------
 import rioxarray as rio
