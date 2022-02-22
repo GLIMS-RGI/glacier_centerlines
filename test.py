@@ -1,6 +1,7 @@
 """ Workflow:
 This scripit does cut and plot a DEM correcponding to each polygon (glacier) 
-given a shapefile and a DEM. In my way.
+given a shapefile and a DEM.
+https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
 """
 # import libraries --------------------
 import rioxarray as rio
@@ -46,7 +47,7 @@ for i in np.arange(len(crop_extent)):
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
     dummy_val = dem_clipped.values[0][dem_clipped.values[0] < 1500].mean()
-    dem_clipped.values[0][dem_clipped.values[0] > 1500] = dummy_val
+    dem_clipped.values[0][dem_clipped.values[0] > 1500] = 0 #dummy_val
     dem_clipped.plot(ax=ax)
     ax.set(title="Raster Layer Cropped to Geodataframe Extent")
     plt.show()
@@ -75,7 +76,6 @@ pixelWidth = transform[1]
 pixelHeight = -transform[5]
 
 data = band.ReadAsArray(0, 0, cols, rows)
-
 
 def profile(points_list):
     """
@@ -135,12 +135,69 @@ for i in np.arange(len(crop_extent)):
     plt.show()
     
     
+# Find for local maxima on the outline
+#x, y = tuple2int(poly_pix.exterior.xy)
+#ext_yx = tuple(reversed(poly_pix.exterior.xy))
+
+#zoutline = topo[y[:-1], x[:-1]]  # last point is first point
+    
+zoutline = dem_clipped.copy()
+
+def _get_terminus_coord(gdir, ext_yx, zoutline):
+    """This finds the terminus coordinate of the glacier.
+    There is a special case for marine terminating glaciers/
+    """
+
+    perc = 20 #cfg.PARAMS['terminus_search_percentile']
+    deltah = 50 #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
+
+    if 0 == 0: #gdir.is_tidewater and (perc > 0):
+        # There is calving
+
+        # find the lowest percentile
+        inglac = zoutline.values[zoutline.values != 0]
+        inglacx = np.repeat(zoutline.x, len(zoutline.y)) 
+        inglacy = np.repeat(zoutline.y, len(zoutline.x))
+
+        plow = np.percentile(inglac, perc).astype(np.int64)
+
+        # the minimum altitude in the glacier
+        mini = np.min(inglac)
+
+        # indices of where in the outline the altitude is lower than the qth
+        # percentile and lower than $delatah meters higher, than the minimum altitude
+        ind = np.where((inglac < plow) & (inglac < (mini + deltah)))[0]
+
+        # We take the middle of this area --> is that good? when we have several minima this does not hold...
+        #try:
+        ind_term = ind[np.round(len(ind) / 2.).astype(int)]
+        #except IndexError:
+        #x = np.array(zoutline.x)
+        #y = np.array(zoutline.y)
+        # find coordinated from ind_term
+        xterm = inglacx.values[ind_term]
+        yterm = inglacy.values[ind_term]
+        xyterm = shpg.Point(xterm, yterm)
+        return xyterm
     
     
+#        except IndexError:
+#            # Sometimes the default perc is not large enough
+#            try:
+#                # Repeat
+#                perc *= 2
+#                plow = np.percentile(zoutline, perc).astype(np.int64)
+#                mini = np.min(zoutline)
+#                ind = np.where((zoutline < plow) &
+#                               (zoutline < (mini + deltah)))[0]
+#                ind_term = ind[np.round(len(ind) / 2.).astype(int)]
+#            except IndexError:
+#                # Last resort
+#                ind_term = np.argmin(zoutline)
+#    else:
+#        # easy: just the minimum
+#        ind_term = np.argmin(zoutline)
     
-    
-    
-    
-    
+#    return np.asarray(ext_yx)[:, ind_term].astype(np.int64)
     
     
