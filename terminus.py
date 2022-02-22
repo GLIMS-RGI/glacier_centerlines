@@ -143,7 +143,9 @@ def get_terminus_coord(ext_yx, zoutline):
     perc = 20 #cfg.PARAMS['terminus_search_percentile']
     deltah = 20 #20 problem #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
 
-    if 0 == 0: #gdir.is_tidewater and (perc > 0):
+    #if gdir.is_tidewater and (perc > 0):
+    if perc > 0:
+
         # There is calving
 
         # find the lowest percentile
@@ -161,18 +163,34 @@ def get_terminus_coord(ext_yx, zoutline):
         ind = np.where((zoutline < plow) & (zoutline < (mini + deltah)))[0]
 
         # We take the middle of this area --> is that good? when we have several minima this does not hold...
-        #try:
-        ind_term = ind[np.round(len(ind) / 2.).astype(int)]
-        #except IndexError:
+        # We take the middle of this area
+        try:
+            ind_term = ind[np.round(len(ind) / 2.).astype(int)]
+        except IndexError:
+            # Sometimes the default perc is not large enough
+            try:
+                # Repeat
+                perc *= 2
+                plow = np.percentile(zoutline, perc).astype(np.int64)
+                mini = np.min(zoutline)
+                ind = np.where((zoutline < plow) &
+                               (zoutline < (mini + deltah)))[0]
+                ind_term = ind[np.round(len(ind) / 2.).astype(int)]
+            except IndexError:
+                # Last resort
+                ind_term = np.argmin(zoutline)
+    else:
+        # easy: just the minimum
+        ind_term = np.argmin(zoutline)        #except IndexError:
         #x = np.array(zoutline.x)
         #y = np.array(zoutline.y)
         # find coordinated from ind_term
-        xterm = ext_yx[ind_term][1]
-        yterm = ext_yx[ind_term][0]
+    xterm = ext_yx[ind_term][1]
+    yterm = ext_yx[ind_term][0]
         
-        xyterm = shpg.Point(xterm, yterm)
+    xyterm = shpg.Point(xterm, yterm)
         
-        return xyterm, ind_term
+    return xyterm, ind_term
     
 #fig = list()
 for i in np.arange(len(crop_extent)):
