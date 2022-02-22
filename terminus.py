@@ -14,6 +14,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 #--------------------------------------
+plot = False #True
 
 # declare general paths
 data_path = "/home/francesc/data/glacier_centerlines/"
@@ -28,7 +29,8 @@ shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
 
 # view all polygons in shapefile:
-crop_extent.plot()
+if plot:
+    crop_extent.plot()
 
 # First check that projections are equal:
 print('DEM crs: ', dem.rio.crs)
@@ -41,22 +43,7 @@ else:
 
 # todo: smooth and fiter DEM
 
-#loop over all geometries
-for i in np.arange(len(crop_extent)): 
-    # start with one outline, and crop the DEM to the outline + a few grid point
-    crp1 = crop_extent.iloc[[i]]
-    ## crop with buffer (I am not sure about the units of the buffer, i assume meters)
-    dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
-                               crop_extent.crs)
-    f, ax = plt.subplots(figsize=(8, 10))
 
-    # assign some value to outside crop: e.g. 0 (default number is too large)
-    dummy_val = dem_clipped.values[0][dem_clipped.values[0] < 1500].mean()
-    dem_clipped.values[0][dem_clipped.values[0] > 1500] = 0 #dummy_val
-    dem_clipped.plot(ax=ax)
-    ax.set(title="Raster Layer Cropped to Geodataframe Extent")
-    plt.show()
- 
 # Compute heads and tails
 ## start with the weighting function:
 ## https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
@@ -84,10 +71,9 @@ data = band.ReadAsArray(0, 0, cols, rows)
 
 def profile(points_list):
     """
-
     Parameters
     ----------
-    points_list : list (?) with latlon.
+    points_list : list with lat, lon.
 
     Returns
     -------
@@ -195,9 +181,27 @@ def get_terminus_coord(ext_yx, zoutline):
     xyterm = shpg.Point(xterm, yterm)
         
     return xyterm, ind_term
-    
-#fig = list()
-for i in np.arange(len(crop_extent)):
+
+#loop over all geometries, plot DEM
+for i in np.arange(len(crop_extent)): 
+    # start with one outline, and crop the DEM to the outline + a few grid point
+    crp1 = crop_extent.iloc[[i]]
+    ## crop with buffer (I am not sure about the units of the buffer, i assume meters)
+    dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
+                               crop_extent.crs)
+
+    # assign some value to outside crop: e.g. 0 (default number is too large)
+    dummy_val = dem_clipped.values[0][dem_clipped.values[0] < 1500].mean()
+    dem_clipped.values[0][dem_clipped.values[0] > 1500] = 0 #dummy_val
+   
+    if plot:
+        f, ax = plt.subplots(figsize=(8, 10))
+        dem_clipped.plot(ax=ax)
+        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+        plt.show()
+
+#loop over all geometries, plot zoutline
+    area = crop_extent.geometry[i].area
     points_yx=crop_extent.geometry.exterior[i].coords #list of X,Y coordinates
     prof = profile(points_yx)
 
@@ -206,32 +210,10 @@ for i in np.arange(len(crop_extent)):
 
     xyterm, ind_term = get_terminus_coord(ext_yx, zoutline)
 
-    #plt.plot(prof[0], prof[1]) 
-    plt.plot(prof[0][:-1], zoutline, '-') #horizontal distance vs altitude
-    plt.plot(prof[0][:-1][ind_term], zoutline[ind_term], 'r*') #terminus
-
-    plt.show()
+    if plot:
+        #plt.plot(prof[0], prof[1]) 
+        plt.plot(prof[0][:-1], zoutline, '-') #horizontal distance vs altitude
+        plt.plot(prof[0][:-1][ind_term], zoutline[ind_term], 'r*') #terminus
     
-
-
-
-#        except IndexError:
-#            # Sometimes the default perc is not large enough
-#            try:
-#                # Repeat
-#                perc *= 2
-#                plow = np.percentile(zoutline, perc).astype(np.int64)
-#                mini = np.min(zoutline)
-#                ind = np.where((zoutline < plow) &
-#                               (zoutline < (mini + deltah)))[0]
-#                ind_term = ind[np.round(len(ind) / 2.).astype(int)]
-#            except IndexError:
-#                # Last resort
-#                ind_term = np.argmin(zoutline)
-#    else:
-#        # easy: just the minimum
-#        ind_term = np.argmin(zoutline)
-    
-#    return np.asarray(ext_yx)[:, ind_term].astype(np.int64)
-    
+        plt.show()    
     
