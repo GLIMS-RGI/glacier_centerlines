@@ -1,4 +1,5 @@
-""" Workflow:
+""" 
+Workflow:
 This scripit does cut and plot a DEM correcponding to each polygon (glacier) 
 given a shapefile and a DEM.
 Then the terminus is found following 
@@ -13,14 +14,15 @@ import shapely.geometry as shpg
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from osgeo import gdal
 #--------------------------------------
-plot = False #True
+plot = True #True
 
 # declare general paths
 data_path = "/home/francesc/data/glacier_centerlines/"
 out_path = "~/results/glacier_centerlines/"
 
-# open the geotiff with rioxarray
+# open the geotiff (DEM) with rioxarray
 dem_file = "Norway_DEM_sel.tif"
 dem = rio.open_rasterio(os.path.join(data_path, dem_file))
 
@@ -32,7 +34,7 @@ crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
 if plot:
     crop_extent.plot()
 
-# First check that projections are equal:
+# Sanity check. Check that projections are equal:
 print('DEM crs: ', dem.rio.crs)
 print('crop extent crs: ', crop_extent.crs)
 
@@ -41,18 +43,18 @@ if dem.rio.crs == crop_extent.crs:
 else:
     raise ValueError('Projections do not match.')
 
+################################################################
 # todo: smooth and fiter DEM
-
+# I don't know exactly what do they mean with that in the paper.
+#
+#
+#
+################################################################
 
 # Compute heads and tails
 ## start with the weighting function:
 ## https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
-crop_extent.geometry.exterior[0].coords[0]
 
-from osgeo import gdal
-
-driver = gdal.GetDriverByName('GTiff')
-#filename = "/home/zeito/pyqgis_data/aleatorio.tif" #path to raster
 dataset = gdal.Open(os.path.join(data_path, dem_file))
 band = dataset.GetRasterBand(1)
 
@@ -62,14 +64,14 @@ rows = dataset.RasterYSize
 #map pixel/line coordinates into georeferenced space
 transform = dataset.GetGeoTransform()
 
-xOrigin = transform[0]
+xOrigin = transform[0] 
 yOrigin = transform[3]
 pixelWidth = transform[1]
 pixelHeight = -transform[5]
 
 data = band.ReadAsArray(0, 0, cols, rows)
 
-def profile(points_list):
+def profile(points_yx):
     """
     Parameters
     ----------
@@ -77,42 +79,42 @@ def profile(points_list):
 
     Returns
     -------
-    profile distance-altitude
-
+    profile distance (arbitrary units) - altitude (m)
     """
+    
+    # initialize vectors
     alt = np.zeros(1)
     dist = np.zeros(1)
     dumdist=0
     
-    
-    for point in points_list:
+    # altitude
+    for point in points_yx:
         col = int((point[0] - xOrigin) / pixelWidth)
         row = int((yOrigin - point[1] ) / pixelHeight)
     
         alt = np.append(alt, data[row][col])   
     
-    # distance along line
-    # Distance between  2 points
-    #a=shpg.Point(points_list[0])
-    #a.distance(shpg.Point(points_list[1]))
-    
-    np.append(points_list, points_list[0])
-    for i in np.arange(len(points_list)):
-        i=int(i)
-        a=shpg.Point(points_list[i])
-        if i == len(points_list)-1:
-            d = a.distance(shpg.Point(points_list[0]))
-        else:
-            d = a.distance(shpg.Point(points_list[i+1]))
-        dumdist = dumdist + d
-        dist = np.append(dist, dumdist)   
-    
-    #remove dummy 0 in the begining
+    #remove dummy 0 in the beginning 
     alt = alt[1:]
     
-    #remove repeated last value 
-    #alt = alt[1:]
-    
+    # distance along line
+    # Distance between  2 points
+ 
+    #repeat the first point at the end
+    #np.append(points_list, points_list[0])
+
+    for i in np.arange(len(points_yx)):
+        i=int(i)
+        a=shpg.Point(points_yx[i])
+        #last point
+        if i == len(points_yx)-1:
+            d = a.distance(shpg.Point(points_yx[0]))
+        else:
+            d = a.distance(shpg.Point(points_yx[i+1]))
+        dumdist = dumdist + d
+        dist = np.append(dist, dumdist)   
+      
+    #remove the dummy 0 ini point
     dist = dist[1:]
      
     return dist, alt
@@ -130,18 +132,11 @@ def get_terminus_coord(ext_yx, zoutline):
     There is a special case for marine terminating glaciers/
     """
 
-    perc = 20 #cfg.PARAMS['terminus_search_percentile']
+    perc = 10 #cfg.PARAMS['terminus_search_percentile']
     deltah = 20 #20 problem #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
 
     #if gdir.is_tidewater and (perc > 0):
     if perc > 0:
-
-        # There is calving
-
-        # find the lowest percentile
-       # inglac = zoutline.values[zoutline.values != 0]
-        #inglacx = np.repeat(zoutline.x, len(zoutline.y)) 
-        #inglacy = np.repeat(zoutline.y, len(zoutline.x))
 
         plow = np.percentile(zoutline, perc).astype(np.int64)
 
@@ -171,12 +166,10 @@ def get_terminus_coord(ext_yx, zoutline):
                 ind_term = np.argmin(zoutline)
     else:
         # easy: just the minimum
-        ind_term = np.argmin(zoutline)        #except IndexError:
-        #x = np.array(zoutline.x)
-        #y = np.array(zoutline.y)
+        ind_term = np.argmin(zoutline)
         # find coordinated from ind_term
-    xterm = ext_yx[ind_term][1]
-    yterm = ext_yx[ind_term][0]
+    xterm = ext_yx[ind_term][0]
+    yterm = ext_yx[ind_term][1]
         
     xyterm = shpg.Point(xterm, yterm)
         
@@ -203,17 +196,21 @@ for i in np.arange(len(crop_extent)):
 #loop over all geometries, plot zoutline
     area = crop_extent.geometry[i].area
     points_yx=crop_extent.geometry.exterior[i].coords #list of X,Y coordinates
+        
+    if points_yx[0] == points_yx[-1]:
+        points_yx = points_yx[:-1]
+        
     prof = profile(points_yx)
 
-    zoutline = prof[1][:-1]
-    ext_yx=points_yx[:-1]
+    zoutline = prof[1]
+    ext_yx=points_yx[:]
 
     xyterm, ind_term = get_terminus_coord(ext_yx, zoutline)
 
     if plot:
         #plt.plot(prof[0], prof[1]) 
-        plt.plot(prof[0][:-1], zoutline, '-') #horizontal distance vs altitude
-        plt.plot(prof[0][:-1][ind_term], zoutline[ind_term], 'r*') #terminus
+        plt.plot(prof[0], zoutline, 'o-') #horizontal distance vs altitude
+        plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*') #terminus
     
         plt.show()    
     
