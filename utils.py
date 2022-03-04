@@ -80,8 +80,8 @@ def _filter_heads(heads, heads_height, radius, polygon):
                     if sub_poly.intersects(head):
                         inter_poly = sub_poly
                         break
-        elif inter_poly.type == 'LineString':
-            inter_poly = shpg.Polygon(np.asarray(inter_poly.xy).T)
+        elif inter_poly.type == 'LineString': #### i have in treoduced "tuple()"in here
+            inter_poly = shpg.Polygon(tuple(np.asarray(inter_poly.xy).T))
         elif inter_poly.type == 'Polygon':
             pass
         else:

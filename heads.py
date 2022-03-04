@@ -21,6 +21,9 @@ import logging
 #------------------------ Import functions ---------
 from functions import get_terminus_coord, profile, coordinate_change
 
+
+from shapely.geometry import Point, LineString, Polygon
+
 plot = False #True
 
 # declare general paths
@@ -150,7 +153,7 @@ for i in np.arange(len(crop_extent)):
     
     # get radius of the buffer according to Kienholz eq. (1)
     q1 = 2/10**6 # 1/m
-    q2=500 #m
+    q2 = 500 #m
     rmax = 1000 #m
     
     radius = q1 * area + q2 # cfg.PARAMS['q1'] * geom['polygon_area'] + cfg.PARAMS['q2']
