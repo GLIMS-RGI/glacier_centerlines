@@ -7,6 +7,7 @@ import shapely.geometry as shpg
 import numpy as np
 from osgeo import gdal
 
+
 def coordinate_change(tif_path):
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)

@@ -1,7 +1,10 @@
 """Some useful functions that did not fit into the other modules.
 """
 import netCDF4
-
+import shapely
+import shapely.geometry as shpg
+import numpy as np
+import copy
 
 class ncDataset(netCDF4.Dataset):
     """Wrapper around netCDF4 setting auto_mask to False"""
@@ -53,8 +56,8 @@ def _filter_heads(heads, heads_height, radius, polygon):
     a list of shapely.geometry.Point instances with the "bad ones" removed
     """
 
-    #heads = copy.copy(heads)
-    #heads_height = copy.copy(heads_height)
+    heads = copy.copy(heads)
+    heads_height = copy.copy(heads_height)
 
     i = 0
     # I think a "while" here is ok: we remove the heads forwards only
