@@ -83,7 +83,7 @@ def get_terminus_coord(ext_yx, zoutline):
     There is a special case for marine terminating glaciers/
     """
 
-    perc = 10 #cfg.PARAMS['terminus_search_percentile']
+    perc = 10 # from oggm #cfg.PARAMS['terminus_search_percentile']
     deltah = 20 #20 problem #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
 
     #if gdir.is_tidewater and (perc > 0):

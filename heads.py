@@ -24,7 +24,7 @@ from functions import get_terminus_coord, profile, coordinate_change
 
 from shapely.geometry import Point, LineString, Polygon
 
-plot = False #True
+plot = True #True
 
 # declare general paths
 data_path = "/home/francesc/data/glacier_centerlines/"
@@ -49,7 +49,8 @@ if plot:
 #todo: discard heads, now no head is discarded
 
 # Module logger
-log = logging.getLogger(__name__)
+#log = logging.getLogger(__name__)
+#logging.basicConfig(filename="test.log", level=logging.my_DEBUG)
 
 single_fl = False
 
@@ -67,13 +68,13 @@ for i in np.arange(len(crop_extent)):
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
     dummy_val = dem_clipped.values[0][dem_clipped.values[0] < 1500].mean()
-    dem_clipped.values[0][dem_clipped.values[0] > 1500] = 0 #dummy_val
+    dem_clipped.values[0][dem_clipped.values[0] > 1500] = dummy_val
    
-    if plot:
-        f, ax = plt.subplots(figsize=(8, 10))
-        dem_clipped.plot(ax=ax)
-        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
-        plt.show()
+    #if plot:
+      #  f, ax = plt.subplots(figsize=(8, 10))
+      #  dem_clipped.plot(ax=ax)
+      #  ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+      #  plt.show()
 
 #plot zoutline
     area = crop_extent.geometry[i].area
@@ -88,12 +89,12 @@ for i in np.arange(len(crop_extent)):
     # get terminus coordinates and position in or data (index)
     xyterm, ind_term = get_terminus_coord(points_yx, prof[1]) #yx, zoutline
 
-    if plot:
-        #plt.plot(prof[0], prof[1]) 
-        plt.plot(prof[0], prof[1], 'o-') #horizontal distance vs altitude
-        plt.plot(prof[0][ind_term], prof[1][ind_term], 'r*') #terminus
+    # if plot:
+    #     #plt.plot(prof[0], prof[1]) 
+    #     plt.plot(prof[0], prof[1], 'o-') #horizontal distance vs altitude
+    #     plt.plot(prof[0][ind_term], prof[1][ind_term], 'r*') #terminus
     
-        plt.show()   
+    #     plt.show()   
     
     zoutline = prof[1]
     ext_yx = points_yx
@@ -140,9 +141,11 @@ for i in np.arange(len(crop_extent)):
     
     headsx = np.array(0)
     headsy = np.array(0)
-    for i in heads_idx:
-        headsx = np.append(headsx, ext_yx[int(i)][1])
-        headsy = np.append(headsy, ext_yx[int(i)][0])
+
+    for j in heads_idx:
+        headsy = np.append(headsy, ext_yx[int(j)][1])
+        headsx = np.append(headsx, ext_yx[int(j)][0])
+ 
     headsx = headsx[1:]
     headsy = headsy[1:]
     heads_z = zoutline[heads_idx]
@@ -168,24 +171,60 @@ for i in np.arange(len(crop_extent)):
     
     # Plus our criteria, quite useful to remove short lines:
     radius += flowline_junction_pix * flowline_dx #cfg.PARAMS['flowline_junction_pix'] * cfg.PARAMS['flowline_dx']
-    log.debug('(%s) radius in raster coordinates: %.2f', radius)
+    #logging.debug('(%s) radius in raster coordinates: %.2f', radius)
+    #print('(%s) radius in raster coordinates: %.2f', radius)
     
     # OK. Filter and see.
-    log.debug('(%s) number of heads before radius filter: %d', len(heads))
+    #logging.debug('(%s) number of heads before radius filter: %d', len(heads))
+    #print('(%s) number of heads before radius filter: %d', len(heads))
     poly_pix = crop_extent.geometry[i]
     
-    #### problem maybe because of heads being shapely.geometry.point.Point and not shapely.geometry.Point
+    #for r=500 it does the job in the last glacier
     heads, heads_z = _filter_heads(heads, list(heads_z), float(radius), poly_pix)
-    #log.debug('(%s) number of heads after radius filter: %d',
-    #          gdir.rgi_id, len(heads))
-
-    # plot profile + terminus + heads:
-    plt.plot(prof[0], zoutline, '-') #horizontal distance vs altitude
-    plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
-    plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
-    plt.xlabel("Distance along outline (a.u.)")
-    plt.ylabel("Altitude (m)")
-    plt.legend()
-    plt.show()
+    #logging.debug('(%s) number of heads after radius filter: %d', len(heads))
+    #print('(%s) number of heads after radius filter: %d', len(heads))
     
+    #if some head removed:
         
+    headsx=np.zeros(1)
+    headsy=np.zeros(1)
+    for k in np.arange(len(heads)):
+        headsy = np.append(headsy, heads[k].y)
+        headsx = np.append(headsx, heads[k].x)
+         
+    headsx = headsx[1:]
+    headsy = headsy[1:]
+    #heads_z = zoutline[heads_idx]
+    #todo:
+    # add vzvalue for only the filtered "good" new heads
+    #
+    #
+
+    #plot profile + terminus + heads:
+    if plot:
+        #profile
+        plt.plot(prof[0], zoutline, '-x') #horizontal distance vs altitude
+        plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
+        plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
+        plt.xlabel("Distance along outline (a.u.)")
+        plt.ylabel("Altitude (m)")
+        plt.legend()
+        plt.show()
+            
+        #raster
+        f, ax = plt.subplots(figsize=(8, 10))
+        dem_clipped.plot(ax=ax)
+        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+        plt.scatter(headsx,headsy, marker="*",s=1000, c="g")
+        plt.scatter(xyterm.x,xyterm.y, marker="*", s=1000, c="r")  
+        crp1.boundary.plot(ax=ax)
+        plt.show()
+                        
+
+
+        # dum=dem_clipped.values[0].ravel()
+        # dem_clipped.values[0][dem_clipped.values[0].ravel[xs] == headsx
+        # f, ax = plt.subplots(figsize=(8, 10))
+        # dem_clipped.plot(ax=ax)
+        # ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+        # plt.show()
