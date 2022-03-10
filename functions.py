@@ -4,9 +4,10 @@ by froura, Mar 2022
 """
 # import libraries --------------------
 import shapely.geometry as shpg
+import shapely
 import numpy as np
 from osgeo import gdal
-
+from scipy.ndimage.morphology import distance_transform_edt
 
 def coordinate_change(tif_path):
     dataset = gdal.Open(tif_path)
@@ -82,12 +83,13 @@ def get_terminus_coord(ext_yx, zoutline):
     """This finds the terminus coordinate of the glacier.
     There is a special case for marine terminating glaciers/
     """
-
+    # NOTE: possible problems in tidewater because of not constant distance between points
+    
     perc = 10 # from oggm #cfg.PARAMS['terminus_search_percentile']
     deltah = 20 #20 problem #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
 
     #if gdir.is_tidewater and (perc > 0):
-    if perc > 0:
+    if min(zoutline) == 0 and perc > 0:
 
         plow = np.percentile(zoutline, perc).astype(np.int64)
 
@@ -98,7 +100,6 @@ def get_terminus_coord(ext_yx, zoutline):
         # percentile and lower than $delatah meters higher, than the minimum altitude
         ind = np.where((zoutline < plow) & (zoutline < (mini + deltah)))[0]
 
-        # We take the middle of this area --> is that good? when we have several minima this does not hold...
         # We take the middle of this area
         try:
             ind_term = ind[np.round(len(ind) / 2.).astype(int)]
@@ -125,3 +126,109 @@ def get_terminus_coord(ext_yx, zoutline):
     xyterm = shpg.Point(xterm, yterm)
     return xyterm, ind_term
 
+def _make_costgrid(mask, ext, z):
+    """Computes a costgrid following Kienholz et al. (2014) Eq. (2)
+    Parameters
+    ----------
+    mask : numpy.array
+        The glacier mask.
+    ext : numpy.array
+        The glacier boundaries' mask.
+    z : numpy.array
+        The terrain height.
+    Returns
+    -------
+    numpy.array of the costgrid
+    """
+    # Kienholz et al eq (2)
+    f1 = 1000.
+    f2 = 3000.
+    a = 4.25
+    b = 3.7  
+    
+    dis = np.where(mask, distance_transform_edt(mask), np.NaN)
+    z = np.where(mask, z, np.NaN)
+
+    dmax = np.nanmax(dis)
+    zmax = np.nanmax(z)
+    zmin = np.nanmin(z)
+    cost = ((dmax - dis) / dmax * f1) ** a + \
+           ((z - zmin) / (zmax - zmin) * f2) ** b
+#    cost = ((dmax - dis) / dmax * cfg.PARAMS['f1']) ** cfg.PARAMS['a'] + \
+#           ((z - zmin) / (zmax - zmin) * cfg.PARAMS['f2']) ** cfg.PARAMS['b']
+
+    # This is new: we make the cost to go over boundaries
+    # arbitrary high to avoid the lines to jump over adjacent boundaries
+#    cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
+    cost[0][np.where(ext)] = np.nanmax(cost[0][np.where(ext)]) * 50
+    
+
+    return np.where(mask, cost, np.Inf)
+
+def _polygon_to_pix(polygon):
+    """Transforms polygon coordinates to integer pixel coordinates. It makes
+    the geometry easier to handle and reduces the number of points.
+    Parameters
+    ----------
+    polygon: the shapely.geometry.Polygon instance to transform.
+    Returns
+    -------
+    a shapely.geometry.Polygon class instance.
+    """
+
+    def project(x, y):
+        return np.rint(x).astype(np.int64), np.rint(y).astype(np.int64)
+
+    def project_coarse(x, y, c=2):
+        return ((np.rint(x/c)*c).astype(np.int64),
+                (np.rint(y/c)*c).astype(np.int64))
+
+    poly_pix = shapely.ops.transform(project, polygon)
+
+    # simple trick to correct invalid polys:
+    tmp = poly_pix.buffer(0)
+
+    # try to deal with a bug in buffer where the corrected poly would be null
+    c = 2
+    while tmp.length == 0 and c < 7:
+        project = partial(project_coarse, c=c)
+        poly_pix = shapely.ops.transform(project_coarse, polygon)
+        tmp = poly_pix.buffer(0)
+        c += 1
+
+    # We tried all we could
+    if tmp.length == 0:
+        raise InvalidGeometryError('This glacier geometry is not valid for '
+                                   'OGGM.')
+
+    # sometimes the glacier gets cut out in parts
+    if tmp.type == 'MultiPolygon':
+        # If only small arms are cut out, remove them
+        area = np.array([_tmp.area for _tmp in tmp.geoms])
+        _tokeep = np.argmax(area).item()
+        tmp = tmp.geoms[_tokeep]
+
+        # check that the other parts really are small,
+        # otherwise replace tmp with something better
+        area = area / area[_tokeep]
+        for _a in area:
+            if _a != 1 and _a > 0.05:
+                # these are extremely thin glaciers
+                # eg. RGI40-11.01381 RGI40-11.01697 params.d1 = 5. and d2 = 8.
+                # make them bigger until its ok
+                for b in np.arange(0., 1., 0.01):
+                    tmp = shapely.ops.transform(project, polygon.buffer(b))
+                    tmp = tmp.buffer(0)
+                    if tmp.type == 'MultiPolygon':
+                        continue
+                    if tmp.is_valid:
+                        break
+                if b == 0.99:
+                    raise InvalidGeometryError('This glacier geometry is not '
+                                               'valid for OGGM.')
+
+    if not tmp.is_valid:
+        raise InvalidGeometryError('This glacier geometry is not valid '
+                                   'for OGGM.')
+
+    return tmp
