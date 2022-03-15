@@ -160,7 +160,8 @@ def _make_costgrid(mask, ext, z):
     # This is new: we make the cost to go over boundaries
     # arbitrary high to avoid the lines to jump over adjacent boundaries
 #    cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
-    cost[0][np.where(ext)] = np.nanmax(cost[0][np.where(ext)]) * 50
+    #this works but makes the costgrid plot ugly
+    #cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
     
 
     return np.where(mask, cost, np.Inf)

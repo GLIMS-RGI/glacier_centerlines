@@ -113,7 +113,6 @@ for i in np.arange(len(crop_extent)):
     #     plt.plot(prof[0][ind_term], prof[1][ind_term], 'r*') #terminus
     
     #     plt.show()   
-    
     zoutline = prof[1]
     ext_yx = points_yx
     
@@ -265,17 +264,23 @@ for i in np.arange(len(crop_extent)):
 
     # Compute the glacier mask (currently: center pixels + touched)
     #nx, ny = gdir.grid.nx, gdir.grid.ny
-    glacier_mask = np.zeros((ny, nx), dtype=np.uint8)
+    glacier_mask = mask.values[0]
+    #glacier_mask = np.zeros((ny, nx), dtype=np.uint8)
     glacier_ext = np.zeros((ny, nx), dtype=np.uint8)
     (x, y) = glacier_poly_pix.exterior.xy
     #glacier_mask[skdraw.polygon(np.array(y), np.array(x))] = 1
     
     for gint in glacier_poly_pix.interiors:
          x, y = tuple2int(gint.xy)
-         glacier_mask[skdraw.polygon(y, x)] = 0
-         glacier_mask[y, x] = 0  # on the nunataks, no
+         #glacier_mask[skdraw.polygon(y, x)] = 0
+         xx, yy = grid.transform(x,y,crs=utm_proj)
+         xx, yy = np.round(xx), np.round(yy)
+         xx, yy = xx.astype(int), yy.astype(int)
+         glacier_mask[yy, xx] = 0  # on the nunataks, no
+    
     x, y = tuple2int(glacier_poly_pix.exterior.xy)
-    #project xy to out shapefile grid
+    
+    #project xy to our shapefile grid
     xx, yy = grid.transform(x,y,crs=utm_proj)
     xx, yy = np.round(xx), np.round(yy)
     xx, yy = xx.astype(int), yy.astype(int)
@@ -283,10 +288,16 @@ for i in np.arange(len(crop_extent)):
     glacier_ext[yy, xx] = 1  
     ext = glacier_ext
     
-    mask = mask.values[0]
+    #mask = mask.values[0]
+    #ext = dem_clipped0.values[0]
+    #TODO: do mask in the oggm way
+    #
+    #
+    
+    mask = glacier_mask
     costgrid = _make_costgrid(mask, ext, z)
-    plt.imshow(costgrid[0])
 
+    
     #plot profile + terminus + heads:
     if plot:
         #profile
@@ -305,5 +316,11 @@ for i in np.arange(len(crop_extent)):
         ax.set(title="Raster Layer Cropped to Geodataframe Extent")
         plt.scatter(headsx,headsy, marker="*",s=1000, c="g")
         plt.scatter(xyterm.x,xyterm.y, marker="*", s=1000, c="r")  
+        crp1.boundary.plot(ax=ax)
+        plt.show()
+        
+        #costgrid
+        plt.imshow(costgrid)
+        plt.colorbar()
         crp1.boundary.plot(ax=ax)
         plt.show()
