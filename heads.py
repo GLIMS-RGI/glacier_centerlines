@@ -18,13 +18,35 @@ import os
 import rioxarray as rio
 import geopandas as gpd
 #import logging
+import copy
 try:
     import skimage.draw as skdraw
 except ImportError:
     pass
+
+try:
+    from skimage import measure
+    from skimage.graph import route_through_array
+except ImportError:
+    pass
 #------------------------ Import functions ---------
 from functions import (get_terminus_coord, profile, coordinate_change, 
-                       _make_costgrid, _polygon_to_pix)
+                       _make_costgrid, _polygon_to_pix, _filter_lines,
+                       _filter_lines_slope, _join_lines)
+
+#some parameters:
+# get radius of the buffer according to Kienholz eq. (1)
+q1 = 2/10**6 # 1/m
+q2 = 500 #m
+rmax = 1000 #m
+localmax_window = 500 #In units of dx
+flowline_dx = 2
+flowline_junction_pix = 3
+kbuffer = 2.5
+min_slope_flowline_filter = 0
+filter_min_slope = True
+flowline_height_smooth = 1
+#
 
 
 plot = True #True
@@ -107,9 +129,7 @@ for i in np.arange(len(crop_extent)):
         
     ### I dont undersatnd this -dx instead of - dy ????
     grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
-    
-    localmax_window = 500 #In units of dx
-    
+        
     # Size of the half window to use to look for local maxima
     maxorder = np.rint(localmax_window/dx) #np.rint(cfg.PARAMS['localmax_window'] / gdir.grid.dx)
     
@@ -145,11 +165,6 @@ for i in np.arange(len(crop_extent)):
     heads = [shpg.Point(x, y) for y, x in zip(headsy,
                                               headsx)]
     
-    # get radius of the buffer according to Kienholz eq. (1)
-    q1 = 2/10**6 # 1/m
-    q2 = 500 #m
-    rmax = 1000 #m
-    
     radius = q1 * area + q2 # cfg.PARAMS['q1'] * geom['polygon_area'] + cfg.PARAMS['q2']
     radius = utils.clip_scalar(radius, 0, rmax) #cfg.PARAMS['rmax'])
     radius /= grid.dx #gdir.grid.dx  # in raster coordinates
@@ -179,13 +194,12 @@ for i in np.arange(len(crop_extent)):
     headsx = headsx[1:]
     headsy = headsy[1:]
     #heads_z = zoutline[heads_idx]
-    #todo:
-    # add zvalue for only the filtered "good" new heads
+    
+    
+    #TODO:
+    # unify dem_clipped0 and dem_clipped
     #
-    #
-    ### Compute cost grid
-    dem_clipped0
-
+    
     # assign some value to outside crop: e.g. 0 (default number is too large)
     dem_clipped0.values[0][dem_clipped0.values[0] < 1500] = 1
     dem_clipped0.values[0][dem_clipped0.values[0] != 1] = 0
@@ -236,17 +250,117 @@ for i in np.arange(len(crop_extent)):
     costgrid = _make_costgrid(mask, ext, z)
 
     
+#####------------------------- Compute centerlines --------------------
+
+    # Cost array
+    #costgrid = _make_costgrid(glacier_mask, glacier_ext, topo)
+
+    # Terminus
+    #t_coord = _get_terminus_coord(gdir, ext_yx, zoutline)
+    t_coord =  xyterm
+    
+    # Compute the routes
+    lines = []
+    heads_pix = []
+    for h in heads:
+        h_coord_pix = np.array(grid.transform(h.x, h.y, crs=utm_proj))
+        h_coord_pix = np.round(h_coord_pix).astype(int)
+        t_coord_pix = np.array(grid.transform(t_coord.x, t_coord.y, crs=utm_proj))
+        t_coord_pix = np.round(t_coord_pix).astype(int)
+        heads_pix.append(shpg.Point(h_coord_pix))
+        indices, _ = route_through_array(costgrid, np.roll(h_coord_pix,1), np.roll(t_coord_pix,1))
+        lines.append(shpg.LineString(np.array(indices)[:, [1, 0]]))
+        
+    # Filter the shortest lines out
+    dx_cls = flowline_dx #cfg.PARAMS['flowline_dx']
+    radius = flowline_junction_pix * dx_cls #cfg.PARAMS['flowline_junction_pix'] * dx_cls
+    radius += 6 * dx_cls
+    
+    #heads in raster coordinates:
+    
+    
+    olines, oheads = _filter_lines(lines, heads_pix, kbuffer, radius) #cfg.PARAMS['kbuffer'], radius)
+    #log.debug('(%s) number of heads after lines filter: %d',
+    #          gdir.rgi_id, len(olines))
+
+    # Filter the lines which are going up instead of down
+    min_slope = np.deg2rad(min_slope_flowline_filter)
+    do_filter_slope = filter_min_slope
+
+
+    ##########
+    #TODO: bring this up in the code
+    #
+    #
+    
+#    class gdir(object):
+#        def __init__(self, grid):
+#            self.grid = grid
+#    
+#    class grid_inf(object):
+#        def __init__(self,dx,dy,nx,ny):
+#            self.dx = dx
+#            self.dy = dy
+#            self.nx = nx
+#            self.ny = ny
+            
+    class glacier_dir(object):
+        def __init__(self, grid):
+            self.grid = grid
+    
+    class grid_inf(object):
+        def __init__(self, grid):
+            self.grid = grid
+
+    grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
+    
+    gdir=glacier_dir(grid)
+    
+    if do_filter_slope:
+        topo = z
+        olines, oheads = _filter_lines_slope(olines, oheads, topo,
+                                             gdir, min_slope)
+       # log.debug('(%s) number of heads after slope filter: %d',
+       #           gdir.rgi_id, len(olines))
+
+    #TODO: problem here with the Centerline class
+    #
+    #
+    # And rejoin the cut tails
+    #olines = _join_lines(olines, oheads)
+
+    # Adds the line level
+    # for cl in olines:
+    #     cl.order = line_order(cl)
+
+    # # And sort them per order !!! several downstream tasks  rely on this
+    # cls = []
+    # for i in np.argsort([cl.order for cl in olines]):
+    #     cls.append(olines[i])
+
+    # # Final check
+    # if len(cls) == 0:
+    #     raise GeometryError('({}) no valid centerline could be '
+    #                         'found!'.format(gdir.rgi_id))
+
+    # # Write the data
+    # gdir.write_pickle(cls, 'centerlines')
+
+    # if is_first_call:
+    #     # For diagnostics of filtered centerlines
+    #     gdir.add_to_diagnostics('n_orig_centerlines', len(cls))
+        
     #plot profile + terminus + heads:
     if plot:
         #profile
         # NOTE: in this plot, removed heads are displayed anyway.
-        plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
-        plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
-        plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
-        plt.xlabel("Distance along outline (a.u.)")
-        plt.ylabel("Altitude (m)")
-        plt.legend()
-        plt.show()
+        # plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
+        # plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
+        # plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
+        # plt.xlabel("Distance along outline (a.u.)")
+        # plt.ylabel("Altitude (m)")
+        # plt.legend()
+        # plt.show()
             
         #raster
         f, ax = plt.subplots(figsize=(8, 10))
@@ -260,5 +374,23 @@ for i in np.arange(len(crop_extent)):
         #costgrid
         plt.imshow(costgrid)
         plt.colorbar()
-        crp1.boundary.plot(ax=ax)
+
+        plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1], marker="*",s=100, c="g")
+        if len(lines) > 1 :
+            plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1], marker="*",s=100, c="g")
+        plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*", s=100, c="r") 
+        
+        #plt.Line2D(lines[0].xy[1], lines[0].xy[0])
+        plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=10, c="y")
+        if len(lines) > 1 :
+            plt.scatter(lines[1].xy[0], lines[1].xy[1], marker="o", s=10, c="y") 
+
+        #crp1.boundary.plot(ax=ax)
         plt.show()
+        
+        
+#        costgrid.plot(ax=ax)
+#        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+#        plt.scatter(headsx,headsy, marker="*",s=1000, c="g")
+#        plt.scatter(xyterm.x,xyterm.y, marker="*", s=1000, c="r")  
+        
