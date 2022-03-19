@@ -5,6 +5,8 @@ import shapely
 import shapely.geometry as shpg
 import numpy as np
 import copy
+from functools import (partial, wraps)
+
 
 class ncDataset(netCDF4.Dataset):
     """Wrapper around netCDF4 setting auto_mask to False"""
@@ -117,25 +119,6 @@ def find_nearest(array, value):
     idx = (np. abs(array - value)). argmin()    
     return array[idx]
 
-class SuperclassMeta(type):
-    """Metaclass for abstract base classes.
-    http://stackoverflow.com/questions/40508492/python-sphinx-inherit-
-    method-documentation-from-superclass
-    """
-    def __new__(mcls, classname, bases, cls_dict):
-        cls = super().__new__(mcls, classname, bases, cls_dict)
-        for name, member in cls_dict.items():
-            if not getattr(member, '__doc__'):
-                try:
-                    member.__doc__ = getattr(bases[-1], name).__doc__
-                except AttributeError:
-                    pass
-        return cls
-
-# define classes
-from utils import SuperclassMeta
-
-
 class glacier_dir(object):
     def __init__(self, grid):
         self.grid = grid
@@ -143,101 +126,6 @@ class glacier_dir(object):
 class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
-
-class Centerline(object, metaclass=SuperclassMeta):
-    """Geometry (line and widths) and flow rooting properties, but no thickness
-    """
-
-    def __init__(self, line, dx=None, surface_h=None, orig_head=None,
-                 rgi_id=None, map_dx=None):
-        """ Initialize a Centerline
-        Parameters
-        ----------
-        line : :py:class:`shapely.geometry.LineString`
-            The geometrically calculated centerline
-        dx : float
-            Grid spacing of the initialised flowline in pixel coordinates
-        surface_h :  :py:class:`numpy.ndarray`
-            elevation [m] of the points on ``line``
-        orig_head : :py:class:`shapely.geometry.Point`
-            geometric point of the lines head
-        rgi_id : str
-            The glacier's RGI identifier
-        map_dx : float
-            the map's grid resolution. Centerline.dx_meter = dx * map_dx
-        """
-
-        self.line = None  # Shapely LineString
-        self.head = None  # Shapely Point
-        self.tail = None  # Shapely Point
-        self.dis_on_line = None
-        self.nx = None
-        if line is not None:
-            self.set_line(line)  # Init all previous properties
-        else:
-            self.nx = len(surface_h)
-            self.dis_on_line = np.arange(self.nx) * dx
-
-        self.order = None  # Hydrological flow level (~ Strahler number)
-
-        # These are computed at run time by compute_centerlines
-        self.flows_to = None  # pointer to a Centerline object (when available)
-        self.flows_to_point = None  # point of the junction in flows_to
-        self.inflows = []  # list of Centerline instances (when available)
-        self.inflow_points = []  # junction points
-
-        # Optional attrs
-        self.dx = dx  # dx in pixels (assumes the line is on constant dx
-        self.map_dx = map_dx  # the pixel spacing
-        try:
-            self.dx_meter = self.dx * self.map_dx
-        except TypeError:
-            # For backwards compatibility we allow this for now
-            self.dx_meter = None
-        self._surface_h = surface_h
-        self._widths = None
-        self.is_rectangular = None
-        self.is_trapezoid = None
-        self.orig_head = orig_head  # Useful for debugging and for filtering
-        self.geometrical_widths = None  # these are kept for plotting and such
-        self.apparent_mb = None  # Apparent MB, NOT weighted by width.
-        self.mu_star = None  # the mu* associated with the apparent mb
-        self.mu_star_is_valid = False  # if mu* leeds to good flux, keep it
-        self.flux = None  # Flux (kg m-2)
-        self.flux_needs_correction = False  # whether this branch was baaad
-        self.rgi_id = rgi_id  # Useful if line is used with another glacier
-
-    def set_flows_to(self, other, check_tail=True, to_head=False):
-        """Find the closest point in "other" and sets all the corresponding
-        attributes. Btw, it modifies the state of "other" too.
-        Parameters
-        ----------
-        other : :py:class:`oggm.Centerline`
-            another flowline where self should flow to
-        """
-
-        self.flows_to = other
-
-        if check_tail:
-            # Project the point and Check that its not too close
-            prdis = other.line.project(self.tail, normalized=False)
-            ind_closest = np.argmin(np.abs(other.dis_on_line - prdis)).item()
-            n = len(other.dis_on_line)
-            if n >= 9:
-                ind_closest = utils.clip_scalar(ind_closest, 4, n-5)
-            elif n >= 7:
-                ind_closest = utils.clip_scalar(ind_closest, 3, n-4)
-            elif n >= 5:
-                ind_closest = utils.clip_scalar(ind_closest, 2, n-3)
-            p = shpg.Point(other.line.coords[int(ind_closest)])
-            self.flows_to_point = p
-        elif to_head:
-            self.flows_to_point = other.head
-        else:
-            # just the closest
-            self.flows_to_point = _projection_point(other, self.tail)
-        other.inflow_points.append(self.flows_to_point)
-        other.inflows.append(self)
         
 def line_interpol(line, dx):
     """Interpolates a shapely LineString to a regularly spaced one.
@@ -297,4 +185,17 @@ def line_interpol(line, dx):
 
     return points
 
+def lazy_property(fn):
+    """Decorator that makes a property lazy-evaluated."""
+
+    attr_name = '_lazy_' + fn.__name__
+
+    @property
+    @wraps(fn)
+    def _lazy_property(self):
+        if not hasattr(self, attr_name):
+            setattr(self, attr_name, fn(self))
+        return getattr(self, attr_name)
+
+    return _lazy_property
 
