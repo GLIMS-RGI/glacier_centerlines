@@ -6,14 +6,13 @@ import shapely.geometry as shpg
 import numpy as np
 import copy
 from functools import (partial, wraps)
-
-
-class ncDataset(netCDF4.Dataset):
-    """Wrapper around netCDF4 setting auto_mask to False"""
-
-    def __init__(self, *args, **kwargs):
-        super(ncDataset, self).__init__(*args, **kwargs)
-        self.set_auto_mask(False)
+from functions import (_projection_point, _normalize)
+#class ncDataset(netCDF4.Dataset):
+#    """Wrapper around netCDF4 setting auto_mask to False"""
+#
+#    def __init__(self, *args, **kwargs):
+#        super(ncDataset, self).__init__(*args, **kwargs)
+#        self.set_auto_mask(False)
 
 def nicenumber(number, binsize, lower=False):
     """Returns the next higher or lower "nice number", given by binsize.
@@ -127,63 +126,6 @@ class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
         
-def line_interpol(line, dx):
-    """Interpolates a shapely LineString to a regularly spaced one.
-    Shapely's interpolate function does not guaranty equally
-    spaced points in space. This is what this function is for.
-    We construct new points on the line but at constant distance from the
-    preceding one.
-    Parameters
-    ----------
-    line: a shapely.geometry.LineString instance
-    dx: the spacing
-    Returns
-    -------
-    a list of equally distanced points
-    """
-
-    # First point is easy
-    points = [line.interpolate(dx / 2.)]
-
-    # Continue as long as line is not finished
-    while True:
-        pref = points[-1]
-        pbs = pref.buffer(dx).boundary.intersection(line)
-        if pbs.type == 'Point':
-            pbs = [pbs]
-        elif pbs.type == 'LineString':
-            # This is rare
-            pbs = [shpg.Point(c) for c in pbs.coords]
-            assert len(pbs) == 2
-        elif pbs.type == 'GeometryCollection':
-            # This is rare
-            opbs = []
-            for p in pbs.geoms:
-                if p.type == 'Point':
-                    opbs.append(p)
-                elif p.type == 'LineString':
-                    opbs.extend([shpg.Point(c) for c in p.coords])
-            pbs = opbs
-        else:
-            if pbs.type != 'MultiPoint':
-                raise RuntimeError('line_interpol: we expect a MultiPoint '
-                                   'but got a {}.'.format(pbs.type))
-
-        try:
-            # Shapely v2 compat
-            pbs = pbs.geoms
-        except AttributeError:
-            pass
-
-        # Out of the point(s) that we get, take the one farthest from the top
-        refdis = line.project(pref)
-        tdis = np.array([line.project(pb) for pb in pbs])
-        p = np.where(tdis > refdis)[0]
-        if len(p) == 0:
-            break
-        points.append(pbs[int(p[0])])
-
-    return points
 
 def lazy_property(fn):
     """Decorator that makes a property lazy-evaluated."""
@@ -198,4 +140,19 @@ def lazy_property(fn):
         return getattr(self, attr_name)
 
     return _lazy_property
+
+class SuperclassMeta(type):
+    """Metaclass for abstract base classes.
+    http://stackoverflow.com/questions/40508492/python-sphinx-inherit-
+    method-documentation-from-superclass
+    """
+    def __new__(mcls, classname, bases, cls_dict):
+        cls = super().__new__(mcls, classname, bases, cls_dict)
+        for name, member in cls_dict.items():
+            if not getattr(member, '__doc__'):
+                try:
+                    member.__doc__ = getattr(bases[-1], name).__doc__
+                except AttributeError:
+                    pass
+        return cls
 

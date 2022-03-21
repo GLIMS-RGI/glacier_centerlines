@@ -10,8 +10,10 @@ from osgeo import gdal
 from scipy.ndimage.morphology import distance_transform_edt
 import copy
 from scipy.interpolate import RegularGridInterpolator
-from utils import line_interpol
+#from utils import line_interpol
 from scipy.ndimage.filters import gaussian_filter1d
+from functools import (partial, wraps)
+
 
 def coordinate_change(tif_path):
     dataset = gdal.Open(tif_path)
@@ -203,8 +205,7 @@ def _polygon_to_pix(polygon):
 
     # We tried all we could
     if tmp.length == 0:
-        raise InvalidGeometryError('This glacier geometry is not valid for '
-                                   'OGGM.')
+        raise ValueError('This glacier geometry is not valid for OGGM.')
 
     # sometimes the glacier gets cut out in parts
     if tmp.type == 'MultiPolygon':
@@ -229,12 +230,12 @@ def _polygon_to_pix(polygon):
                     if tmp.is_valid:
                         break
                 if b == 0.99:
-                    raise InvalidGeometryError('This glacier geometry is not '
-                                               'valid for OGGM.')
+                    raise ValueError('This glacier geometry is not valid for OGGM.')#InvalidGeometryError('This glacier geometry is not '
+                                               #'valid for OGGM.')
 
     if not tmp.is_valid:
-        raise InvalidGeometryError('This glacier geometry is not valid '
-                                   'for OGGM.')
+        raise ValueError('This glacier geometry is not valid for OGGM.')#InvalidGeometryError('This glacier geometry is not '
+                                               #'valid for OGGM.')
 
     return tmp
 
@@ -377,4 +378,108 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
             oheads.append(head)
 
     return olines, oheads
+
+
+def _normalize(n):
+    """Computes the normals of a vector n.
+    Returns
+    -------
+    the two normals (n1, n2)
+    """
+    nn = n / np.sqrt(np.sum(n*n))
+    n1 = np.array([-nn[1], nn[0]])
+    n2 = np.array([nn[1], -nn[0]])
+    return n1, n2
+
+
+def _projection_point(centerline, point):
+    """Projects a point on a line and returns the closest integer point
+    guaranteed to be on the line, and guaranteed to be far enough from the
+    head and tail.
+    Parameters
+    ----------
+    centerline : Centerline instance
+    point : Shapely Point geometry
+    Returns
+    -------
+    (flow_point, ind_closest): Shapely Point and indice in the line
+    """
+    prdis = centerline.line.project(point, normalized=False)
+    ind_closest = np.argmin(np.abs(centerline.dis_on_line - prdis)).item()
+    flow_point = shpg.Point(centerline.line.coords[int(ind_closest)])
+    return flow_point
+
+def line_order(line):
+    """Recursive search for the line's hydrological level.
+    Parameters
+    ----------
+    line: a Centerline instance
+    Returns
+    -------
+    The line's order
+    """
+
+    if len(line.inflows) == 0:
+        return 0
+    else:
+        levels = [line_order(s) for s in line.inflows]
+        return np.max(levels) + 1
+
+def line_interpol(line, dx):
+    """Interpolates a shapely LineString to a regularly spaced one.
+    Shapely's interpolate function does not guaranty equally
+    spaced points in space. This is what this function is for.
+    We construct new points on the line but at constant distance from the
+    preceding one.
+    Parameters
+    ----------
+    line: a shapely.geometry.LineString instance
+    dx: the spacing
+    Returns
+    -------
+    a list of equally distanced points
+    """
+
+    # First point is easy
+    points = [line.interpolate(dx / 2.)]
+
+    # Continue as long as line is not finished
+    while True:
+        pref = points[-1]
+        pbs = pref.buffer(dx).boundary.intersection(line)
+        if pbs.type == 'Point':
+            pbs = [pbs]
+        elif pbs.type == 'LineString':
+            # This is rare
+            pbs = [shpg.Point(c) for c in pbs.coords]
+            assert len(pbs) == 2
+        elif pbs.type == 'GeometryCollection':
+            # This is rare
+            opbs = []
+            for p in pbs.geoms:
+                if p.type == 'Point':
+                    opbs.append(p)
+                elif p.type == 'LineString':
+                    opbs.extend([shpg.Point(c) for c in p.coords])
+            pbs = opbs
+        else:
+            if pbs.type != 'MultiPoint':
+                raise RuntimeError('line_interpol: we expect a MultiPoint '
+                                   'but got a {}.'.format(pbs.type))
+
+        try:
+            # Shapely v2 compat
+            pbs = pbs.geoms
+        except AttributeError:
+            pass
+
+        # Out of the point(s) that we get, take the one farthest from the top
+        refdis = line.project(pref)
+        tdis = np.array([line.project(pb) for pb in pbs])
+        p = np.where(tdis > refdis)[0]
+        if len(p) == 0:
+            break
+        points.append(pbs[int(p[0])])
+
+    return points
 

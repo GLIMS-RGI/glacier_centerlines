@@ -10,8 +10,6 @@ import utils as utils
 from utils import lazy_property
 from utils import _filter_heads
 import salem
-#import shapely
-#import copy
 import shapely.geometry as shpg
 import matplotlib.pyplot as plt
 import os
@@ -30,51 +28,48 @@ try:
 except ImportError:
     pass
 from itertools import groupby
+try:
+    from scipy.signal.windows import gaussian
+except AttributeError:
+    # Old scipy
+    from scipy.signal import gaussian
 #------------------------ Import functions ---------
 from functions import (get_terminus_coord, profile, coordinate_change, 
                        _make_costgrid, _polygon_to_pix, _filter_lines,
-                       _filter_lines_slope)#, _join_lines)
+                       _filter_lines_slope, _normalize, 
+                       _projection_point, line_order, line_interpol)
 
 #some parameters:
+# TODO: parse the parameters in the OGGM way (cfg.PARAMS[''])
+#
+#
+#
+
+import params
 # get radius of the buffer according to Kienholz eq. (1)
-q1 = 2/10**6 # 1/m
-q2 = 500 #m
-rmax = 1000 #m
-localmax_window = 500 #In units of dx
-flowline_dx = 2
-flowline_junction_pix = 3
-kbuffer = 2.5
-min_slope_flowline_filter = 0
-filter_min_slope = True
-flowline_height_smooth = 1
-is_first_call = False
+
+q1 = params.q1
+q2 = params.q2 #m
+rmax = params.rmax #m
+localmax_window = params.localmax_window #In units of dx
+flowline_dx = params.flowline_dx
+flowline_junction_pix = params.flowline_junction_pix
+kbuffer = params.kbuffer
+min_slope_flowline_filter = params.min_slope_flowline_filter
+filter_min_slope = params.filter_min_slope
+flowline_height_smooth = params.flowline_height_smooth
+is_first_call = params.is_first_call
 
 #
 
 # define classes
-class SuperclassMeta(type):
-    """Metaclass for abstract base classes.
-    http://stackoverflow.com/questions/40508492/python-sphinx-inherit-
-    method-documentation-from-superclass
-    """
-    def __new__(mcls, classname, bases, cls_dict):
-        cls = super().__new__(mcls, classname, bases, cls_dict)
-        for name, member in cls_dict.items():
-            if not getattr(member, '__doc__'):
-                try:
-                    member.__doc__ = getattr(bases[-1], name).__doc__
-                except AttributeError:
-                    pass
-        return cls
-#from utils import SuperclassMeta
+from utils import SuperclassMeta
 
-class glacier_dir(object):
-    def __init__(self, grid):
-        self.grid = grid
-
-class grid_inf(object):
-    def __init__(self, grid):
-        self.grid = grid
+GAUSSIAN_KERNEL = dict()
+for ks in [5, 7, 9]:
+    kernel = gaussian(ks, 1)
+    GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
+    
 class Centerline(object, metaclass=SuperclassMeta):
     """Geometry (line and widths) and flow rooting properties, but no thickness
     """
@@ -306,6 +301,15 @@ class Centerline(object, metaclass=SuperclassMeta):
                 gk = GAUSSIAN_KERNEL[5]
                 self.flows_to.flux[ide-2:ide+3] += gk * flux[-1]
 
+
+class glacier_dir(object):
+    def __init__(self, grid):
+        self.grid = grid
+
+class grid_inf(object):
+    def __init__(self, grid):
+        self.grid = grid
+
 #### FUNCTIONS: ######
 def _join_lines(lines, heads):
     """Re-joins the lines that have been cut by _filter_lines
@@ -353,40 +357,6 @@ def _join_lines(lines, heads):
             break
 
     return olines[::-1]
-
-def _projection_point(centerline, point):
-    """Projects a point on a line and returns the closest integer point
-    guaranteed to be on the line, and guaranteed to be far enough from the
-    head and tail.
-    Parameters
-    ----------
-    centerline : Centerline instance
-    point : Shapely Point geometry
-    Returns
-    -------
-    (flow_point, ind_closest): Shapely Point and indice in the line
-    """
-    prdis = centerline.line.project(point, normalized=False)
-    ind_closest = np.argmin(np.abs(centerline.dis_on_line - prdis)).item()
-    flow_point = shpg.Point(centerline.line.coords[int(ind_closest)])
-    return flow_point
-
-def line_order(line):
-    """Recursive search for the line's hydrological level.
-    Parameters
-    ----------
-    line: a Centerline instance
-    Returns
-    -------
-    The line's order
-    """
-
-    if len(line.inflows) == 0:
-        return 0
-    else:
-        levels = [line_order(s) for s in line.inflows]
-        return np.max(levels) + 1
-
 
 plot = True #True
 
@@ -628,9 +598,7 @@ for i in np.arange(len(crop_extent)):
     ##########
     #TODO: bring this up in the code
     #
-    #
-                
-
+    #         
     grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
     
     gdir=glacier_dir(grid)
@@ -642,9 +610,6 @@ for i in np.arange(len(crop_extent)):
        # log.debug('(%s) number of heads after slope filter: %d',
        #           gdir.rgi_id, len(olines))
 
-    #TODO: problem here with the Centerline class
-    #
-    #
     # And rejoin the cut tails
     olines = _join_lines(olines, oheads)
 
