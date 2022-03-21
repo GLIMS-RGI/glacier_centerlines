@@ -33,5 +33,10 @@ The tools you will need:
 - shapely to do the geometrical stuff (as OGGM does)
 - scipy for the routing algorithm (as OGGM does)
 
-Good luck!
+#----------------------------------------
 
+## Files:
+- `main.py` : contains all workflow
+- `functions.py` : contains most of the functions that have been taken from oggm plus some others that have been created additionally (`get_terminus()`, `profile()` and `coordinate_change()`)
+- `utils.py` : contains other code that is used mainly as a toolbox.
+- `params.py` : contains all the parameters used in `main.py` so there is no need to modify them in `main.py`
