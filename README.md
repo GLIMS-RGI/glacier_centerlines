@@ -33,7 +33,7 @@ The tools you will need:
 - shapely to do the geometrical stuff (as OGGM does)
 - scipy for the routing algorithm (as OGGM does)
 
-#----------------------------------------
+# UPDATE, version 0:
 
 ## Files:
 - `main.py` : contains all workflow
