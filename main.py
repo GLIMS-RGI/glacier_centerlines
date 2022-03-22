@@ -39,11 +39,6 @@ from functions import (get_terminus_coord, profile, coordinate_change,
                        _filter_lines_slope, _normalize, 
                        _projection_point, line_order, line_interpol)
 
-#some parameters:
-# TODO: parse the parameters in the OGGM way (cfg.PARAMS[''])
-#
-#
-#
 
 import params
 # get radius of the buffer according to Kienholz eq. (1)
@@ -394,17 +389,21 @@ data, pix_params = coordinate_change(dem_path)
 
 #loop over all geometries
 for i in np.arange(len(crop_extent)): 
+    print(i)
     # start with one outline, and crop the DEM to the outline + a few grid point
     crp1 = crop_extent.iloc[[i]]
     # crop with buffer. Buffer in meters
     dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
                                crop_extent.crs)
-    dem_clipped0 = dem_clipped.copy()
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
     dummy_val = dem_clipped.values[0][dem_clipped.values[0] < 32000].mean()
-    dem_clipped.values[0][dem_clipped.values[0] > 32000] = dummy_val
+    dem_clipped.values[0][dem_clipped.values[0] > 32000] = 0
 
+    # Create 0 and 1 mask
+    mask = dem_clipped.copy()
+    mask.values[0][mask.values[0] != 0] = 1
+    
 #plot zoutline
     area = crop_extent.geometry[i].area
     points_yx=crop_extent.geometry.exterior[i].coords #list of X,Y coordinates
@@ -504,19 +503,9 @@ for i in np.arange(len(crop_extent)):
     headsy = headsy[1:]
     #heads_z = zoutline[heads_idx]
     
-    
-    #TODO:
-    # unify dem_clipped0 and dem_clipped
-    #
-    
-    # assign some value to outside crop: e.g. 0 (default number is too large)
-    dem_clipped0.values[0][dem_clipped0.values[0] < 1500] = 1
-    dem_clipped0.values[0][dem_clipped0.values[0] != 1] = 0
-    mask = dem_clipped0
-    ext = ext_yx
+    # topography on glacier
     z = dem_clipped.values[0]
     
-#points = dem_clipped0[0, [y_ind], [x_ind]]
     glacier_poly_hr = crp1.geometry[i]
     proj=utm_proj
 
@@ -546,10 +535,9 @@ for i in np.arange(len(crop_extent)):
     #glacier_mask[y, x] = 1
     glacier_ext[yy, xx] = 1  
     ext = glacier_ext
-    
-    #mask = mask.values[0]
-    #ext = dem_clipped0.values[0]
-    #TODO: do mask in the oggm way
+      
+
+    #TODO: do mask in the oggm way (?)
     #
     #
     
@@ -635,6 +623,7 @@ for i in np.arange(len(crop_extent)):
     #     gdir.add_to_diagnostics('n_orig_centerlines', len(cls))
         
     #plot profile + terminus + heads:
+
     if plot:
         #profile
         # NOTE: in this plot, removed heads are displayed anyway.
@@ -655,6 +644,8 @@ for i in np.arange(len(crop_extent)):
         crp1.boundary.plot(ax=ax)
         plt.show()
         
+        #glacier_poly_pix.exterior
+        
         #costgrid
         plt.imshow(costgrid)
         plt.colorbar()
@@ -665,13 +656,13 @@ for i in np.arange(len(crop_extent)):
         plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*", s=100, c="r") 
         
         #plt.Line2D(lines[0].xy[1], lines[0].xy[0])
-        plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=10, c="y")
+        plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=1000/(nx*ny), c="y")
         if len(lines) > 1 :
-            plt.scatter(lines[1].xy[0], lines[1].xy[1], marker="o", s=10, c="y") 
+            plt.scatter(lines[1].xy[0], lines[1].xy[1], marker="o", s=1000/(nx*ny), c="y") 
 
         #crp1.boundary.plot(ax=ax)
         plt.show()
-        
+
         
 #        costgrid.plot(ax=ax)
 #        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
