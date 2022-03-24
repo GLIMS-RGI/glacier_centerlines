@@ -390,9 +390,10 @@ data, pix_params = coordinate_change(dem_path)
 #loop over all geometries
 for i in np.arange(len(crop_extent)): 
     print(i)
-    # start with one outline, and crop the DEM to the outline + a few grid point
+    # start with one outline
     crp1 = crop_extent.iloc[[i]]
-    # crop with buffer. Buffer in meters
+    
+    # crop the DEM to the outline + a few grid pointcrop with buffer. Buffer in meters
     dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
                                crop_extent.crs)
 
@@ -515,15 +516,22 @@ for i in np.arange(len(crop_extent)):
     tuple2int = partial(np.array, dtype=np.int64)
 
     # Compute the glacier mask (currently: center pixels + touched)
-    glacier_mask = mask.values[0]
+    #glacier_mask = mask.values[0]
+    glacier_mask = np.zeros((ny, nx), dtype=np.uint8)
     glacier_ext = np.zeros((ny, nx), dtype=np.uint8)
     (x, y) = glacier_poly_pix.exterior.xy
+    
+    #transform coordinates to pixels and assign to 1
+    xx, yy = grid.transform(x,y,crs=utm_proj)
+    glacier_mask[skdraw.polygon(np.array(yy), np.array(xx))] = 1
     
     for gint in glacier_poly_pix.interiors:
          x, y = tuple2int(gint.xy)
          xx, yy = grid.transform(x,y,crs=utm_proj)
          xx, yy = np.round(xx), np.round(yy)
          xx, yy = xx.astype(int), yy.astype(int)
+         #glacier_mask[skdraw.polygon(y, x)] = 0
+         glacier_mask[skdraw.polygon(yy, xx)] = 0
          glacier_mask[yy, xx] = 0  # on the nunataks
     
     x, y = tuple2int(glacier_poly_pix.exterior.xy)
@@ -532,17 +540,17 @@ for i in np.arange(len(crop_extent)):
     xx, yy = grid.transform(x,y,crs=utm_proj)
     xx, yy = np.round(xx), np.round(yy)
     xx, yy = xx.astype(int), yy.astype(int)
-    #glacier_mask[y, x] = 1
+    glacier_mask[yy, xx] = 1
     glacier_ext[yy, xx] = 1  
-    ext = glacier_ext
+    #ext = glacier_ext
       
 
     #TODO: do mask in the oggm way (?)
     #
     #
     
-    mask = glacier_mask
-    costgrid = _make_costgrid(mask, ext, z)
+    #mask = glacier_mask
+    costgrid = _make_costgrid(glacier_mask, glacier_ext, z)
 
     
 #####------------------------- Compute centerlines --------------------
@@ -586,7 +594,8 @@ for i in np.arange(len(crop_extent)):
     ##########
     #TODO: bring this up in the code
     #
-    #         
+    #        
+    
     grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
     
     gdir=glacier_dir(grid)
