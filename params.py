@@ -1,6 +1,17 @@
 # Configuration file for OGGM parameters
-# this is mine
+
+### not sure: add description
 is_first_call = False
+
+# declare general paths
+data_path = "/home/francesc/data/glacier_centerlines/"
+out_path = "~/results/glacier_centerlines/"
+
+# DEM file name
+dem_file = "Norway_DEM_sel.tif"
+
+# Shapefile file name 
+shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 
 ### Input/Output paths. Set to ~ to default to home directory
 
@@ -151,3 +162,7 @@ min_slope_flowline_filter = 0
 # of glacier geometries after the run, but is not necessary if you
 # are interested in diagnostics only (volume, length, etc.)
 store_model_geometry = False
+
+### Plots 
+# Produce plots in the terminal? True = y; False = n
+plot = True

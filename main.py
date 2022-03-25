@@ -15,15 +15,13 @@ import matplotlib.pyplot as plt
 import os
 import rioxarray as rio
 import geopandas as gpd
-#import logging
-import copy
+
 try:
     import skimage.draw as skdraw
 except ImportError:
     pass
-from functools import (partial, wraps)
+from functools import partial
 try:
-    from skimage import measure
     from skimage.graph import route_through_array
 except ImportError:
     pass
@@ -37,12 +35,15 @@ except AttributeError:
 from functions import (get_terminus_coord, profile, coordinate_change, 
                        _make_costgrid, _polygon_to_pix, _filter_lines,
                        _filter_lines_slope, _normalize, 
-                       _projection_point, line_order, line_interpol)
+                       _projection_point, line_order)
 
+# TODO: filling and filtering, from  Kienholtz paper.
+# - apply gaussian filter to the DEM
+# - fill depressions 
+# - error at i=12, see what's happening
 
 import params
-# get radius of the buffer according to Kienholz eq. (1)
-
+# (info in params.py)
 q1 = params.q1
 q2 = params.q2 #m
 rmax = params.rmax #m
@@ -54,17 +55,24 @@ min_slope_flowline_filter = params.min_slope_flowline_filter
 filter_min_slope = params.filter_min_slope
 flowline_height_smooth = params.flowline_height_smooth
 is_first_call = params.is_first_call
+plot = params.plot
+data_path = params.data_path
+out_path = params.out_path
+dem_file = params.dem_file
+shape_file = params.shape_file
 
 #
 
-# define classes
-from utils import SuperclassMeta
-
+# this is something used in the centerline class, but I don't know what 
+# is it used for
 GAUSSIAN_KERNEL = dict()
 for ks in [5, 7, 9]:
     kernel = gaussian(ks, 1)
     GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
-    
+
+### Define classes to reuse some functions from original OGGM code
+from utils import SuperclassMeta
+
 class Centerline(object, metaclass=SuperclassMeta):
     """Geometry (line and widths) and flow rooting properties, but no thickness
     """
@@ -296,7 +304,6 @@ class Centerline(object, metaclass=SuperclassMeta):
                 gk = GAUSSIAN_KERNEL[5]
                 self.flows_to.flux[ide-2:ide+3] += gk * flux[-1]
 
-
 class glacier_dir(object):
     def __init__(self, grid):
         self.grid = grid
@@ -305,7 +312,8 @@ class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
 
-#### FUNCTIONS: ######
+### FUNCTION: It may have to go to functions.py but it gave some cross 
+# import problems so at the moment I keep it here 
 def _join_lines(lines, heads):
     """Re-joins the lines that have been cut by _filter_lines
      Compute the rooting scheme.
@@ -353,8 +361,6 @@ def _join_lines(lines, heads):
 
     return olines[::-1]
 
-plot = True #True
-
 # declare general paths
 data_path = "/home/francesc/data/glacier_centerlines/"
 out_path = "~/results/glacier_centerlines/"
@@ -372,23 +378,19 @@ crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
 if plot:
     crop_extent.plot()
 
-#need to run terminus .py
-
-#toadd: single_fl, for now, single_fl = 0
-#todo: discard heads, now no head is discarded
-
-# Module logger
-#log = logging.getLogger(__name__)
-#logging.basicConfig(filename="test.log", level=logging.my_DEBUG)
-
 single_fl = False
 
 # get altitude and pixel info: 
 # altitude, (xorigin, yorigin, pixelH, pixelW)
 data, pix_params = coordinate_change(dem_path)
 
+dum = np.arange(12)
+dum = np.append(dum, np.arange(13, len(crop_extent))) 
+
 #loop over all geometries
-for i in np.arange(len(crop_extent)): 
+#for i in np.arange(len(crop_extent)): 
+for i in dum: 
+    
     print(i)
     # start with one outline
     crp1 = crop_extent.iloc[[i]]
@@ -480,9 +482,9 @@ for i in np.arange(len(crop_extent)):
 
     # params from default OGGM
     # Grid spacing of a flowline in pixel coordinates
-    flowline_dx = 2
+    flowline_dx = flowline_dx
     # Number of pixels to arbitrarily remove at junctions
-    flowline_junction_pix = 3
+    flowline_junction_pix = flowline_junction_pix
     
     # Plus our criteria, quite useful to remove short lines:
     radius += flowline_junction_pix * flowline_dx #cfg.PARAMS['flowline_junction_pix'] * cfg.PARAMS['flowline_dx']
@@ -616,8 +618,8 @@ for i in np.arange(len(crop_extent)):
 
     # # And sort them per order !!! several downstream tasks  rely on this
     cls = []
-    for i in np.argsort([cl.order for cl in olines]):
-        cls.append(olines[i])
+    for k in np.argsort([cl.order for cl in olines]):
+        cls.append(olines[k])
 
     # # Final check
     #if len(cls) == 0:
@@ -636,13 +638,13 @@ for i in np.arange(len(crop_extent)):
     if plot:
         #profile
         # NOTE: in this plot, removed heads are displayed anyway.
-        # plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
-        # plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
-        # plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
-        # plt.xlabel("Distance along outline (a.u.)")
-        # plt.ylabel("Altitude (m)")
-        # plt.legend()
-        # plt.show()
+        #plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
+        #plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
+        #plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
+        #plt.xlabel("Distance along outline (a.u.)")
+        #plt.ylabel("Altitude (m)")
+        #plt.legend()
+        #plt.show()
             
         #raster
         f, ax = plt.subplots(figsize=(8, 10))
@@ -668,11 +670,7 @@ for i in np.arange(len(crop_extent)):
         plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=1000/(nx*ny), c="y")
         if len(lines) > 1 :
             plt.scatter(lines[1].xy[0], lines[1].xy[1], marker="o", s=1000/(nx*ny), c="y") 
-
-        #crp1.boundary.plot(ax=ax)
-        plt.show()
-
-        
+       
 #        costgrid.plot(ax=ax)
 #        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
 #        plt.scatter(headsx,headsy, marker="*",s=1000, c="g")
