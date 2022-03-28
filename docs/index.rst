@@ -12,6 +12,8 @@ Overview
 Core principles and structure of the OGGM modelling framework.
 
 * :doc:`introduction`
+* :doc:`flowlines`
+* :doc:`code`
 
 .. toctree::
     :maxdepth: 1
@@ -19,4 +21,7 @@ Core principles and structure of the OGGM modelling framework.
     :caption: Principles
 
     introduction.rst
+    flowlines.rst
+    code.rst
+    
 

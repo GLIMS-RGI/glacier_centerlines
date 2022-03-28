@@ -1,31 +1,17 @@
 Introduction
 ============
 
-This is the introduction to the Glacier_Centerlines project.
+The glacier_centerlines project is a spin-off that comes from OGGM glacier evolution model. We have taken most of the code from the original OGGM functions and workflow. Its main purpose is to compute the glacier central flowlines given a Digital Elevation Model (DEM) and a glacier outline in a georefferenced format.
 
 **Motivation**
-This project was created as a consequence of the increasing complexity of OGGM. Some people wanted to use a part of the features of the model without having to run it all. The feature that is wanted to be computable independentily from OGGM is glacier centerlines. Consequentily here we fullow the same methodology as in OGGM and reuse part of the code from OGGM.
+Due to the increasing complexity of OGGM, it has been convenient to separate the determination of the glacier centerlines from the main model. Therefore users can obtain the glacier flowlines using the same methodology as in OGGM, with a code that is thought to serve this only purpose.
 
-.. _OGGM: https://OGGM.org
-.. _OGGMgit: https://github.com/OGGM
 
-There are 4 main scripts in the repository, listed below:
+**External links**
 
-**Code organization**
+`OGGM <https://OGGM.org>`_
 
-.. admonition:: **Scripts**
-    :class: info
+`OGGM git repository <https://github.com/OGGM>`_
 
-    main.py
-      The workflow of the project is executed in this script. It calls all the other scripts, loads DEM and glaciers outlines and computes the glacier heads, tails and ultimately the centerlines. 
-
-    utils.py
-      It is a Toolbox for the whole project. It provides some small functions and classes.
-
-    functions.py
-      Functions used in main.py. Most of the functions come from OGGM/core and OGGM/utils. Some others are new.
-      
-    params.py
-      Here the main parameters used in main.py are listed and initialized.
 
 
