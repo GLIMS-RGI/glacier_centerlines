@@ -1,0 +1,18 @@
+Code
+====
+
+There are 4 main scripts in the repository, listed below:
+
+**Scripts**
+
+*main.py*
+      The workflow of the project is executed in this script. It calls all the other scripts, loads DEM and glaciers outlines and computes the glacier heads, tails and ultimately the centerlines. 
+
+*utils.py*
+      It is a Toolbox for the whole project. It provides some small functions and classes.
+
+*functions.py*
+      Functions used in main.py. Most of the functions come from OGGM/core and OGGM/utils. Some others are new.
+
+*params.py*
+      Here the main parameters used in main.py are listed and initialized.

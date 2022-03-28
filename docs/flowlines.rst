@@ -1,0 +1,114 @@
+.. _flowlines:
+
+Glacier flowlines
+=================
+
+OGGM's default model is a "flowline model", which means that the glacier ice flow is
+assumed to happen along a representative "1.5D" flowline, as in the image
+below. "1.5D" here is used to emphasize that although glacier ice can flow
+only in one direction along the flowline, each point of the glacier has
+a geometrical width. This width means that flowline glaciers are able to match
+the observed area-elevation distribution of true glaciers, and can parametrize
+the changes in glacier width with thickness changes.
+
+.. figure:: _static/hef_flowline.jpg
+   :width: 80%
+   :align: left
+
+   Example of a glacier flowline. Background image from
+   http://www.swisseduc.ch/glaciers/alps/hintereisferner/index-de.html
+
+
+Geometrical centerlines
+-----------------------
+
+Centerline determination
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Our algorithm is an implementation of the procedure described by
+`Kienholz et al., (2014)`_. Apart from some minor changes (mostly the choice
+of some parameters), we stay close to the original algorithm.
+
+.. _Kienholz et al., (2014): http://www.the-cryosphere.net/8/503/2014/
+
+
+The basic idea is to find the terminus of the glacier (its lowest point) and
+a series of centerline "heads" (local elevation maxima). The centerlines are then
+computed with a least cost routing algorithm minimizing both (i) the total
+elevation gain and (ii) the distance to the glacier terminus.
+
+The glacier has a major centerline (the longest one), and
+tributary branches (in this case: two). The Hintereisferner glacier is a
+good example of a wrongly outlined glacier: the two northern glacier sub-catchments
+should have been classified as independent entities since they do not flow
+to the main flowline (more on this below).
+
+At this stage, the centerlines are still not fully suitable
+for modelling. Therefore, a rather simple
+procedure converts them to "flowlines", which
+now have a regular grid spacing (which they will
+keep for the rest of the workflow). The tail of the tributaries are cut
+of before reaching the flowline they are tributing to:
+
+This step is needed to better represent glacier widths at flowline junctions.
+The empty circles on the main flowline indicate the location where the respective
+tributaries are connected (i.e. where the ice flux that is originating from the
+tributary will be added to the main flux when running the model dynamic).
+
+
+.. _flprocons:
+
+Pros and cons of both methods
+-----------------------------
+
+Flowline representation of the glacier is **always** a simplification!
+
+Geometrical centerlines
+~~~~~~~~~~~~~~~~~~~~~~~
+
+- Pros:
+
+  - Closer to the "true" length of the glacier.
+  - Grid points along the centerlines preserve their geometrical information,
+    i.e. one can compute the exact location of ice thickness change.
+  - It is possible to have different model parameters for each flowline (e.g.
+    different mass-balance models), although this is coming with its own
+    challenges.
+  - Arguably: better suitability for mass-balance parameterizations taking
+    glacier geometry and exposition into account.
+  - Arguably: better representation of the main glacier flow?
+
+- Cons:
+
+  - Complex and error prone: considerably more code than the elevation band
+    flowlines.
+  - Less robust: more glaciers are failing in the preprocessing than with
+    the simpler method.
+    When glaciers are badly outlined (or worse, when ice caps are not
+    properly divided), or with bad DEMs, the geometrical flowline
+    can "look" very ugly.
+  - Computationally expensive (more grid points on average, more prone
+    to numerical instabilities).
+  - Complex handling of mass-balance parameters for tributaries at the
+    inversion (leading to multiple temperature sensitivity parameters
+    for large glaciers).
+  - Related: **all "new generation" mass-balance models in OGGM currently
+    handle only a single flowline because of this complexity.**
+
+.. admonition:: **Summary**
+
+   **When to use:** when geometry matters, and when length is a important variable.
+   For mountain glaciers (e.g. Alps, Himalayas). With the old mass-balance
+   model.
+
+   **When not to use:** for ice caps, badly outlined glaciers, very large and
+   flat glaciers, for global applications where geometrical details matters less.
+   With the more fancy mass-balance models.
+
+
+References
+----------
+
+Kienholz, C., Rich, J. L., Arendt, A. A., and Hock, R.: A new method for deriving glacier centerlines applied to glaciers in Alaska and northwest Canada, The Cryosphere, 8, 503–519, https://doi.org/10.5194/tc-8-503-2014, 2014.
+
+
