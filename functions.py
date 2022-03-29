@@ -7,13 +7,12 @@ import shapely.geometry as shpg
 import shapely
 import numpy as np
 from osgeo import gdal
+import scipy
 from scipy.ndimage.morphology import distance_transform_edt
-import copy
 from scipy.interpolate import RegularGridInterpolator
-#from utils import line_interpol
+import copy
 from scipy.ndimage.filters import gaussian_filter1d
-from functools import (partial, wraps)
-
+from functools import partial
 
 def coordinate_change(tif_path):
     dataset = gdal.Open(tif_path)
@@ -334,10 +333,10 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
     -------
     (lines, heads) a list of the new lines and corresponding heads
     """
-
-    dx_cls = flowline_dx = 2 #= cfg.PARAMS['flowline_dx']
-    lid = flowline_junction_pix = int(3) #int(cfg.PARAMS['flowline_junction_pix'])
-    sw = flowline_height_smooth = 1 #cfg.PARAMS['flowline_height_smooth']
+    import params
+    dx_cls = params.flowline_dx #= cfg.PARAMS['flowline_dx']
+    lid = params.flowline_junction_pix  #int(cfg.PARAMS['flowline_junction_pix'])
+    sw = params.flowline_height_smooth  #cfg.PARAMS['flowline_height_smooth']
 
     # Bilinear interpolation
     # Geometries coordinates are in "pixel centered" convention, i.e
@@ -482,3 +481,27 @@ def line_interpol(line, dx):
         points.append(pbs[int(p[0])])
 
     return points
+
+def gaussian_blur(in_array, size):
+    """Applies a Gaussian filter to a 2d array.
+    Parameters
+    ----------
+    in_array : numpy.array
+        The array to smooth.
+    size : int
+        The half size of the smoothing window.
+    Returns
+    -------
+    a smoothed numpy.array
+    """
+
+    # expand in_array to fit edge of kernel
+    padded_array = np.pad(in_array, size, 'symmetric')
+
+    # build kernel
+    x, y = np.mgrid[-size:size + 1, -size:size + 1]
+    g = np.exp(-(x**2 / float(size) + y**2 / float(size)))
+    g = (g / g.sum()).astype(np.float)#in_array.dtype) #I had to change that
+
+    # do the Gaussian blur
+    return scipy.signal.fftconvolve(padded_array, g, mode='valid')

@@ -36,7 +36,7 @@ except AttributeError:
 from functions import (get_terminus_coord, profile, coordinate_change, 
                        _make_costgrid, _polygon_to_pix, _filter_lines,
                        _filter_lines_slope, _normalize, 
-                       _projection_point, line_order)
+                       _projection_point, line_order, gaussian_blur)
 
 import gzip
 import pickle
@@ -64,6 +64,7 @@ data_path = params.data_path
 out_path = params.out_path
 dem_file = params.dem_file
 shape_file = params.shape_file
+smooth_window = params.smooth_window
 
 #
 
@@ -370,6 +371,12 @@ dem_file = "Norway_DEM_sel.tif"
 dem_path = os.path.join(data_path, dem_file)
 dem = rio.open_rasterio(dem_path)
 
+#smooth dem
+dx = abs(dem.x[0] - dem.x[1])
+gsize = int(np.rint(smooth_window / dx))
+smoothed_dem = gaussian_blur(np.array(dem.values[0]), int(gsize))
+dem.values[0] = smoothed_dem
+
 # open shapefile 
 shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
@@ -423,7 +430,7 @@ for i in dum:
     zoutline = prof[1]
     ext_yx = points_yx
     
-    ## here heads star
+    ## here heads start
     # create grid
     nx = len(dem_clipped.x)
     ny = len(dem_clipped.y)
