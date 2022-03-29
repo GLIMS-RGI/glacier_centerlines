@@ -162,6 +162,10 @@ min_slope_flowline_filter = 0
 # are interested in diagnostics only (volume, length, etc.)
 store_model_geometry = False
 
+# Single flow: if True, a single, principal flowline is computed. 
+# If False, tributaries are also computed.
+single_fl = False
+    
 ### Plots 
 # Produce plots in the terminal? True = y; False = n
 plot = True

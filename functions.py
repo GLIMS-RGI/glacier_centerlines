@@ -15,6 +15,16 @@ from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
 
 def coordinate_change(tif_path):
+    """
+    Parameters
+    ----------
+    tif_path :str 
+        path to raster file
+        
+    Returns
+    -------
+    Raster values and pixel parameters (xOrigin, yOrigin, pixelHeight, pixelWidth)
+    """
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)
 
@@ -38,11 +48,16 @@ def profile(points_yx, data, pix_params):
     """
     Parameters
     ----------
-    points_list : list with lat, lon.
-
+    points_list : 
+        list with lat, lon.
+    data : 
+        np.ndarray, altitude (topography) of each pixel
+    pix_params : 
+        list  with (xorigin, yorigin, pixelH, pixelW)
+        
     Returns
     -------
-    profile distance (arbitrary units) - altitude (m)
+    tuple: profile distance (arbitrary units) - altitude (m)
     """
     
     # initialize vectors
@@ -87,6 +102,16 @@ def profile(points_yx, data, pix_params):
 def get_terminus_coord(ext_yx, zoutline):
     """This finds the terminus coordinate of the glacier.
     There is a special case for marine terminating glaciers/
+    Parameters
+    ----------
+    ext_yx : list
+        list with the coordinates (y,x) from the points on the glacier outline
+    zoutline : np.ndarray
+        altitude of the outline points
+    Returns
+    -------
+    xy - coordinates (shapely.geometry.point.Point) of the glacier terminus.
+    index: integer, index of the terminus in the input list.
     """
     # NOTE: possible problems in tidewater because of not constant distance between points
     
