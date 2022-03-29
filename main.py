@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import os
 import rioxarray as rio
 import geopandas as gpd
+import xarray as xr
 
 try:
     import skimage.draw as skdraw
@@ -36,6 +37,9 @@ from functions import (get_terminus_coord, profile, coordinate_change,
                        _make_costgrid, _polygon_to_pix, _filter_lines,
                        _filter_lines_slope, _normalize, 
                        _projection_point, line_order)
+
+import gzip
+import pickle
 
 # TODO: filling and filtering, from  Kienholtz paper.
 # - apply gaussian filter to the DEM
@@ -361,10 +365,6 @@ def _join_lines(lines, heads):
 
     return olines[::-1]
 
-# declare general paths
-data_path = "/home/francesc/data/glacier_centerlines/"
-out_path = "~/results/glacier_centerlines/"
-
 # open the geotiff (DEM) with rioxarray
 dem_file = "Norway_DEM_sel.tif"
 dem_path = os.path.join(data_path, dem_file)
@@ -390,7 +390,7 @@ dum = np.append(dum, np.arange(13, len(crop_extent)))
 #loop over all geometries
 #for i in np.arange(len(crop_extent)): 
 for i in dum: 
-    
+  
     print(i)
     # start with one outline
     crp1 = crop_extent.iloc[[i]]
@@ -552,13 +552,12 @@ for i in dum:
     #
     
     #mask = glacier_mask
-    costgrid = _make_costgrid(glacier_mask, glacier_ext, z)
 
     
 #####------------------------- Compute centerlines --------------------
 
     # Cost array
-    #costgrid = _make_costgrid(glacier_mask, glacier_ext, topo)
+    costgrid = _make_costgrid(glacier_mask, glacier_ext, z)
 
     # Terminus
     #t_coord = _get_terminus_coord(gdir, ext_yx, zoutline)
@@ -616,7 +615,7 @@ for i in dum:
     for cl in olines:
         cl.order = line_order(cl)
 
-    # # And sort them per order !!! several downstream tasks  rely on this
+    # And sort them per order !!! several downstream tasks  rely on this
     cls = []
     for k in np.argsort([cl.order for cl in olines]):
         cls.append(olines[k])
@@ -626,17 +625,34 @@ for i in dum:
     #    raise GeometryError('({}) no valid centerline could be '
     #                         'found!'.format(gdir.rgi_id))
 
-    # # Write the data
-    #gdir.write_pickle(cls, 'centerlines')
+
+    # Write the data
+    #to_write = xr.DataArray()
+    #to_write.attrs = {attribute name : attribute value}
+    #to_write.attrs["x"] = dem_clipped.x
+    #to_write.attrs['y'] = dem_clipped.y
+    #to_write.attrs['values'] = 
+    #write_pickle(cls, 'centerlines')
+    #use_comp = True#(use_compression if use_compression is not None
+                #else cfg.PARAMS['use_compression'])
+    #_open = gzip.open if use_comp else open
+    #filename = crp1.breID
+    #pickle.dump(cls, filename, protocol=4)
 
     #if is_first_call:
     #     # For diagnostics of filtered centerlines
     #     gdir.add_to_diagnostics('n_orig_centerlines', len(cls))
-        
-    #plot profile + terminus + heads:
+    
+    # write centerlines
+    use_comp = True
+    _open = gzip.open if use_comp else open
+    fp =  out_path + "centerline_glacier_" + str(i) + ".pkl"
+    with _open(fp, 'wb') as f:
+        pickle.dump(cls, f, protocol = 4)
 
     if plot:
         #profile
+        #plot profile + terminus + heads:
         # NOTE: in this plot, removed heads are displayed anyway.
         #plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
         #plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus

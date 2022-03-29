@@ -482,4 +482,3 @@ def line_interpol(line, dx):
         points.append(pbs[int(p[0])])
 
     return points
-

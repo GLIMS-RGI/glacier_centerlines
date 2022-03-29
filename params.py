@@ -5,7 +5,7 @@ is_first_call = False
 
 # declare general paths
 data_path = "/home/francesc/data/glacier_centerlines/"
-out_path = "~/results/glacier_centerlines/"
+out_path = "/home/francesc/results/glacier_centerlines/"
 
 # DEM file name
 dem_file = "Norway_DEM_sel.tif"
@@ -165,4 +165,4 @@ store_model_geometry = False
 
 ### Plots 
 # Produce plots in the terminal? True = y; False = n
-plot = True
+plot = False
