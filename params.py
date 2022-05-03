@@ -4,13 +4,17 @@
 is_first_call = False
 
 # declare general paths
-data_path = "/home/francesc/data/glacier_centerlines/"
+#data_path = "/home/francesc/data/glacier_centerlines/"
+#out_path = "/home/francesc/results/glacier_centerlines/"
+data_path = "/home/francesc/data/glacier_centerlines/new_baltoro/"
 out_path = "/home/francesc/results/glacier_centerlines/"
 
-dem_file = "Norway_DEM_sel.tif"
+#dem_file = "Norway_DEM_sel.tif"
+dem_file = "dem_balto_tm.tif"
 
 # Shapefile file name 
-shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
+#shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
+shape_file = "outlines.shp"
 
 ### Input/Output paths. Set to ~ to default to home directory
 
@@ -26,7 +30,6 @@ shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 # Use compression for the intermediate pickles? (might slow down I/O a bit)
 # Both the performance loss (0% ?) and the space gain (-10%) seem to be low
 use_compression = True
-
 
 ### CENTERLINE determination
 

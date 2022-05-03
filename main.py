@@ -391,12 +391,12 @@ if plot:
 data, pix_params = coordinate_change(dem_path)
 
 # skip glacier i=12 because here is some problem determining the minimum cost trajectory
-dum = np.arange(12)
-dum = np.append(dum, np.arange(13, len(crop_extent))) 
+#dum = np.arange(12)
+#dum = np.append(dum, np.arange(13, len(crop_extent))) 
 
 # loop over all glaciers
-# for i in np.arange(len(crop_extent)): 
-for i in dum: 
+for i in np.arange(len(crop_extent)): 
+#for i in dum: 
     print(i)
     # select i-th glacier
     crp1 = crop_extent.iloc[[i]]
@@ -406,7 +406,8 @@ for i in dum:
                                crop_extent.crs)
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
-    dem_clipped.values[0][dem_clipped.values[0] > 32000] = 0
+    #dem_clipped.values[0][dem_clipped.values[0] > 32000] = 0
+    dem_clipped.values[0][dem_clipped.values[0] < -32000] = 0
     
     ### Determine heads and tails ###
     area = crop_extent.geometry[i].area
@@ -525,6 +526,10 @@ for i in dum:
     
     #transform coordinates to pixels and assign to 1 inside, 0 otherwise
     xx, yy = grid.transform(x,y,crs=utm_proj)
+    
+    # I have added a np.clip because some errors when regridding data
+    xx = np.clip(xx, 0, glacier_mask.shape[1]-1)
+    yy = np.clip(yy, 0, glacier_mask.shape[0]-1)
     glacier_mask[skdraw.polygon(np.array(yy), np.array(xx))] = 1
     
     for gint in glacier_poly_pix.interiors:
@@ -536,11 +541,16 @@ for i in dum:
          glacier_mask[yy, xx] = 0  # on the nunataks
     
     x, y = tuple2int(glacier_poly_pix.exterior.xy)
-    
+
     #project xy to our shapefile (raster) grid
     xx, yy = grid.transform(x,y,crs=utm_proj)
     xx, yy = np.round(xx), np.round(yy)
     xx, yy = xx.astype(int), yy.astype(int)
+    
+    # I have added a np.clip because some errors when regridding data
+    xx = np.clip(xx, 0, glacier_mask.shape[1]-1)
+    yy = np.clip(yy, 0, glacier_mask.shape[0]-1)
+    
     glacier_mask[yy, xx] = 1
     glacier_ext[yy, xx] = 1  
     
@@ -554,15 +564,25 @@ for i in dum:
     # Compute the least cost routes
     lines = []
     heads_pix = []
+    count = 0
     for h in heads:
-        h_coord_pix = np.array(grid.transform(h.x, h.y, crs=utm_proj))
-        h_coord_pix = np.round(h_coord_pix).astype(int)
-        t_coord_pix = np.array(grid.transform(t_coord.x, t_coord.y, crs=utm_proj))
-        t_coord_pix = np.round(t_coord_pix).astype(int)
-        heads_pix.append(shpg.Point(h_coord_pix))
-        indices, _ = route_through_array(costgrid, np.roll(h_coord_pix,1), np.roll(t_coord_pix,1))
-        lines.append(shpg.LineString(np.array(indices)[:, [1, 0]]))
-        
+        try:
+            h_coord_pix = np.array(grid.transform(h.x, h.y, crs=utm_proj))
+            h_coord_pix = np.round(h_coord_pix).astype(int)
+            t_coord_pix = np.array(grid.transform(t_coord.x, t_coord.y, crs=utm_proj))
+            t_coord_pix = np.round(t_coord_pix).astype(int)
+            heads_pix.append(shpg.Point(h_coord_pix))
+         
+            indices, _ = route_through_array(costgrid, np.roll(h_coord_pix,1), np.roll(t_coord_pix,1))
+            lines.append(shpg.LineString(np.array(indices)[:, [1, 0]]))
+        except:
+            print("There is a problem when computing the least-cost route")
+            #raise Exception("There is a problem when computing the least-cost route")
+            count += 1
+        finally:
+            print(".")
+    print(str(count) + " centerlines out of " + str(len(heads)) + " were not able to be computed" )
+    
     # Filter the shortest lines out
     dx_cls = flowline_dx #cfg.PARAMS['flowline_dx']
     radius = flowline_junction_pix * dx_cls #cfg.PARAMS['flowline_junction_pix'] * dx_cls
@@ -635,9 +655,14 @@ for i in dum:
         plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*", s=100, c="r") 
         
         plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=5000/(nx*ny), c="y")
-        if len(lines) > 1 :
-            plt.scatter(lines[1].xy[0], lines[1].xy[1], marker="o", s=5000/(nx*ny), c="y") 
-        plt.show()
+        #if len(lines) > 1 :
+        #    plt.scatter(lines[1].xy[0], lines.xy[1], marker="o", s=5000/(nx*ny), c="y") 
+
+
+        for lin in np.arange(len(lines)):
+            plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o", s=5000/(nx*ny), c="y") 
+        plt.show() 
+        
 
 
         
