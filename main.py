@@ -382,6 +382,15 @@ dem.values[0] = smoothed_dem
 # read shapefile (glacier outlines)
 crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
 
+# Check that projection is in metre
+import warnings
+try:
+    assert crop_extent.crs.axis_info[0].unit_name == 'metre'
+    # TODO: dem crs check in meters
+    #assert crop_extent.crs.axis_info[0].unit_name == 'metre'        
+except Exception:
+    warnings.warn('Projection from input data is not in meters.')
+
 # view all glaciers at once:
 if plot:
     crop_extent.plot()
@@ -611,18 +620,7 @@ for i in np.arange(len(crop_extent)):
     cls = []
     for k in np.argsort([cl.order for cl in olines]):
         cls.append(olines[k])
-
-    # Write centerlines
-    # TODO: save it in geographic and not raster coordinates
-    #    
-    #
     
-    use_comp = True
-    _open = gzip.open if use_comp else open
-    fp =  out_path + "centerline_glacier_" + str(i) + ".pkl"
-    with _open(fp, 'wb') as f:
-        pickle.dump(cls, f, protocol = 4)
-
     if plot: #(this is provisional, for checking urposes only)
         # plot profile
         #plot profile + terminus + heads:
@@ -662,6 +660,23 @@ for i in np.arange(len(crop_extent)):
         for lin in np.arange(len(lines)):
             plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o", s=5000/(nx*ny), c="y") 
         plt.show() 
+
+# Write centerlines
+# TODO: save it in geographic and not raster coordinates
+#    
+
+# transformm raster to geographical coordinates
+    cls[0].line.xy #this is in raster coordinates
+    
+# save lines
+    use_comp = True
+    _open = gzip.open if use_comp else open
+    fp =  out_path + "centerline_glacier_" + str(i) + ".pkl"
+    with _open(fp, 'wb') as f:
+        pickle.dump(cls, f, protocol = 4)
+        
+
+
         
 
 
