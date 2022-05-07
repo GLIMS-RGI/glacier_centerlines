@@ -667,7 +667,9 @@ for i in np.arange(len(crop_extent)):
 
 # transformm raster to geographical coordinates
     cls[0].line.xy #this is in raster coordinates
-    
+    a,b = salem.transform_proj(grid.proj, utm_proj,  
+                               np.array(cls[10].line.xy[0]), 
+                               np.array(cls[10].line.xy[1]))
 # save lines
     use_comp = True
     _open = gzip.open if use_comp else open
