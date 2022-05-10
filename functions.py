@@ -23,8 +23,8 @@ def coordinate_change(tif_path):
         
     Returns
     -------
-    Raster values and pixel parameters (xOrigin, yOrigin, pixelHeight, pixelWidth)
-    """
+    Raster values and raster parameters (xOrigin, yOrigin, pixelHeight, pixelWidth)
+    """     
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)
 

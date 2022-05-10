@@ -434,22 +434,27 @@ for i in np.arange(len(crop_extent)):
 
     zoutline = prof[1]
 
+    # TODO:
+    #
+    
     ## here heads start
     # create grid
     nx = len(dem_clipped.x)
     ny = len(dem_clipped.y)
-    dx = abs(max(dem_clipped.x) - min(dem_clipped.x))/nx
-    dy = abs(max(dem_clipped.y) - min(dem_clipped.y))/ny
-    ulx = min(dem_clipped.x)
-    uly = max(dem_clipped.y)
+    dx = abs(max(dem_clipped.x) - min(dem_clipped.x))/(nx-1)
+    dy = abs(max(dem_clipped.y) - min(dem_clipped.y))/(ny-1)
+    ulx = min(dem_clipped.x) # this is the center of the pixel!
+    uly = max(dem_clipped.y) # this is the center of the pixel!
+    
+    ulx, uly, dx, dy = pix_params
     
     ### I dont undersatnd this dx instead of dy ????
     x0y0 = (ulx + dx/2, uly - dx/2) # To pixel center coordinates
     
-    # try the curent crs
+    # try the shapefile curent crs for the raster grid
     utm_proj = salem.check_crs(crop_extent.crs)
         
-    ### I dont undersatnd this -dx instead of - dy ????
+    ### I dont undersatnd this -dx instead of -dy ????
     grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
      
     # fill gdir class with grid data
@@ -494,17 +499,18 @@ for i in np.arange(len(crop_extent)):
     #radius for descarting heads
     radius = q1 * area + q2 
     radius = utils.clip_scalar(radius, 0, rmax) 
-    radius /= grid.dx #in raster coordinates
+    radius /= grid.dx # radius in raster coordinates
 
     ## params taken from default OGGM values  
     # Plus our criteria, quite useful to remove short lines:
     radius += flowline_junction_pix * flowline_dx #cfg.PARAMS['flowline_junction_pix'] * cfg.PARAMS['flowline_dx']
     
     # OK. Filter and see.
-    poly_pix = crop_extent.geometry[i]
+    glacier_poly_hr = crop_extent.geometry[i]
     
     # heads' coordinates and altitude
-    heads, heads_z = _filter_heads(heads, list(heads_z), float(radius), poly_pix)
+    heads, heads_z = _filter_heads(heads, list(heads_z), float(radius), \
+                                   glacier_poly_hr)
     
     #if some head removed:
     headsx=np.zeros(1)
@@ -520,7 +526,7 @@ for i in np.arange(len(crop_extent)):
     z = dem_clipped.values[0]
     
     # glacier (polygon) (for some reason i have to keep the index 'i' and i cannot use just [0])
-    glacier_poly_hr = crp1.geometry[i]
+    #glacier_poly_hr = crp1.geometry[i]
 
 # Rounded nearest pix
     glacier_poly_pix = _polygon_to_pix(glacier_poly_hr)
@@ -534,24 +540,24 @@ for i in np.arange(len(crop_extent)):
     (x, y) = glacier_poly_pix.exterior.xy
     
     #transform coordinates to pixels and assign to 1 inside, 0 otherwise
-    xx, yy = grid.transform(x,y,crs=utm_proj)
+    xx, yy = grid.transform(x, y, crs = utm_proj)
     
     # I have added a np.clip because some errors when regridding data
-    xx = np.clip(xx, 0, glacier_mask.shape[1]-1)
-    yy = np.clip(yy, 0, glacier_mask.shape[0]-1)
-    glacier_mask[skdraw.polygon(np.array(yy), np.array(xx))] = 1
+    xx = np.clip(xx, 0, glacier_mask.shape[1] - 1)
+    yy = np.clip(yy, 0, glacier_mask.shape[0] - 1)
+    glacier_mask[skdraw.polygon(np.array(yy), np.array(xx))] = 1 #1 inside plygon
     
     for gint in glacier_poly_pix.interiors:
          x, y = tuple2int(gint.xy)
-         xx, yy = grid.transform(x,y,crs=utm_proj)
+         xx, yy = grid.transform(x, y, crs=utm_proj)
          xx, yy = np.round(xx), np.round(yy)
          xx, yy = xx.astype(int), yy.astype(int)
-         glacier_mask[skdraw.polygon(yy, xx)] = 0
-         glacier_mask[yy, xx] = 0  # on the nunataks
+         glacier_mask[skdraw.polygon(yy, xx)] = 0 # inside the nunataks
+         glacier_mask[yy, xx] = 0  # onto nunatacks boundaries
     
     x, y = tuple2int(glacier_poly_pix.exterior.xy)
 
-    #project xy to our shapefile (raster) grid
+    #project xy to our local (raster) grid
     xx, yy = grid.transform(x,y,crs=utm_proj)
     xx, yy = np.round(xx), np.round(yy)
     xx, yy = xx.astype(int), yy.astype(int)
@@ -560,7 +566,7 @@ for i in np.arange(len(crop_extent)):
     xx = np.clip(xx, 0, glacier_mask.shape[1]-1)
     yy = np.clip(yy, 0, glacier_mask.shape[0]-1)
     
-    glacier_mask[yy, xx] = 1
+    glacier_mask[yy, xx] = 1 # glacier bundaries belong to the glacier
     glacier_ext[yy, xx] = 1  
     
 #####------------------------- Compute centerlines --------------------
@@ -667,15 +673,32 @@ for i in np.arange(len(crop_extent)):
 
 # transformm raster to geographical coordinates
     cls[0].line.xy #this is in raster coordinates
-    a,b = salem.transform_proj(grid.proj, utm_proj,  
-                               np.array(cls[10].line.xy[0]), 
-                               np.array(cls[10].line.xy[1]))
+    cls_xy = []
+
+    for li in cls:  
+    #ij_to_xy
+        i = np.array(li.line.xy[0])     
+        j = np.array(li.line.xy[1])
+        x = ulx + i * dx
+        y = uly - j * dy
+    
+        xy = np.zeros((len(x), 2))
+
+        xy[:,0] = x
+        xy[:,1] = -y
+
+        lxy = shpg.LineString(xy)
+        
+        cls_xy.append(lxy)
+        
 # save lines
     use_comp = True
     _open = gzip.open if use_comp else open
     fp =  out_path + "centerline_glacier_" + str(i) + ".pkl"
     with _open(fp, 'wb') as f:
         pickle.dump(cls, f, protocol = 4)
+        
+
         
 
 
