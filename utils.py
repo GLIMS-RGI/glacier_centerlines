@@ -1,18 +1,11 @@
 """Some useful functions that did not fit into the other modules.
 """
-import netCDF4
 import shapely
 import shapely.geometry as shpg
 import numpy as np
 import copy
-from functools import (partial, wraps)
-from functions import (_projection_point, _normalize)
-#class ncDataset(netCDF4.Dataset):
-#    """Wrapper around netCDF4 setting auto_mask to False"""
-#
-#    def __init__(self, *args, **kwargs):
-#        super(ncDataset, self).__init__(*args, **kwargs)
-#        self.set_auto_mask(False)
+from functools import (wraps)
+
 
 def nicenumber(number, binsize, lower=False):
     """Returns the next higher or lower "nice number", given by binsize.
@@ -33,12 +26,14 @@ def nicenumber(number, binsize, lower=False):
         return e * binsize
     else:
         return (e + 1) * binsize
-    
+
+
 def clip_scalar(value, vmin, vmax):
     """A faster numpy.clip ON SCALARS ONLY.
     See https://github.com/numpy/numpy/issues/14281
     """
     return vmin if value < vmin else vmax if value > vmax else value
+
 
 def _filter_heads(heads, heads_height, radius, polygon):
     """Filter the head candidates following Kienholz et al. (2014), Ch. 4.1.2
@@ -81,14 +76,14 @@ def _filter_heads(heads, heads_height, radius, polygon):
                     if sub_poly.intersects(head):
                         inter_poly = sub_poly
                         break
-        elif inter_poly.type == 'LineString': #### i have in treoduced "tuple()"in here
+        elif inter_poly.type == 'LineString':  # i have in treoduced "tuple()"
             inter_poly = shpg.Polygon(tuple(np.asarray(inter_poly.xy).T))
         elif inter_poly.type == 'Polygon':
             pass
         else:
             extext = ('Geometry collection not expected: '
                       '{}'.format(inter_poly.type))
-            #raise InvalidGeometryError(extext)
+            # raise InvalidGeometryError(extext)
 
         # Find other points in radius and in polygon
         _heads = [head]
@@ -113,19 +108,22 @@ def _filter_heads(heads, heads_height, radius, polygon):
 
     return heads, heads_height
 
+
 def find_nearest(array, value):
     array = np. asarray(array)
-    idx = (np. abs(array - value)). argmin()    
+    idx = (np. abs(array - value)).argmin()
     return array[idx]
+
 
 class glacier_dir(object):
     def __init__(self, grid):
         self.grid = grid
-    
+
+
 class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
-        
+
 
 def lazy_property(fn):
     """Decorator that makes a property lazy-evaluated."""
@@ -141,6 +139,7 @@ def lazy_property(fn):
 
     return _lazy_property
 
+
 class SuperclassMeta(type):
     """Metaclass for abstract base classes.
     http://stackoverflow.com/questions/40508492/python-sphinx-inherit-
@@ -155,4 +154,3 @@ class SuperclassMeta(type):
                 except AttributeError:
                     pass
         return cls
-

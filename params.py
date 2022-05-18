@@ -12,7 +12,7 @@ out_path = "/home/francesc/results/glacier_centerlines/"
 #dem_file = "Norway_DEM_sel.tif"
 dem_file = "dem_balto_tm.tif"
 
-# Shapefile file name 
+# Shapefile file name
 #shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 shape_file = "outlines.shp"
 

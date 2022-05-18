@@ -14,90 +14,94 @@ import copy
 from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
 
+
 def coordinate_change(tif_path):
     """
     Parameters
     ----------
-    tif_path :str 
+    tif_path :str
         path to raster file
-        
+
     Returns
     -------
-    Raster values and raster parameters (xOrigin, yOrigin, pixelHeight, pixelWidth)
-    """     
+    Raster values and raster parameters (xOrigin, yOrigin, pixelHeight,
+                                         pixelWidth)
+    """
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)
 
     cols = dataset.RasterXSize
     rows = dataset.RasterYSize
 
-    #map pixel/line coordinates into georeferenced space
+    # map pixel/line coordinates into georeferenced space
     transform = dataset.GetGeoTransform()
 
-    xOrigin = transform[0] 
+    xOrigin = transform[0]
     yOrigin = transform[3]
     pixelWidth = transform[1]
     pixelHeight = -transform[5]
 
     data = band.ReadAsArray(0, 0, cols, rows)
-    pix_params= [xOrigin,yOrigin,pixelHeight,pixelWidth]
-    
+    pix_params = [xOrigin,yOrigin,pixelHeight,pixelWidth]
+
     return data, pix_params
+
 
 def profile(points_yx, data, pix_params):
     """
     Parameters
     ----------
-    points_list : 
+    points_list :
         list with lat, lon.
-    data : 
+    data :
         np.ndarray, altitude (topography) of each pixel
-    pix_params : 
+    pix_params :
         list  with (xorigin, yorigin, pixelH, pixelW)
-        
+
     Returns
     -------
     tuple: profile distance (arbitrary units) - altitude (m)
     """
-    
+
     # initialize vectors
     alt = np.zeros(1)
     dist = np.zeros(1)
-    dumdist=0
-    
+    dumdist = 0
+
     xOrigin, yOrigin, pixelHeight, pixelWidth = pix_params
-    
+
     # altitude
     for point in points_yx:
         col = int((point[0] - xOrigin) / pixelWidth)
-        row = int((yOrigin - point[1] ) / pixelHeight)
-    
-        alt = np.append(alt, data[row][col])   
-    
-    #remove dummy 0 in the beginning 
+        row = int((yOrigin - point[1]) / pixelHeight)
+
+        alt = np.append(alt, data[row][col])
+
+    # remove dummy 0 in the beginning
     alt = alt[1:]
-    
+
     # distance along line
     # Distance between  2 points
- 
-    #repeat the first point at the end
-    #np.append(points_list, points_list[0])
+
+    # repeat the first point at the end
+    # np.append(points_list, points_list[0])
 
     for i in np.arange(len(points_yx)):
-        i=int(i)
-        a=shpg.Point(points_yx[i])
-        #last point
+        i = int(i)
+        a = shpg.Point(points_yx[i])
+        # last point
         if i == len(points_yx)-1:
             d = a.distance(shpg.Point(points_yx[0]))
         else:
             d = a.distance(shpg.Point(points_yx[i+1]))
         dumdist = dumdist + d
-        dist = np.append(dist, dumdist)   
-      
-    #remove the dummy 0 ini point
+        dist = np.append(dist, dumdist)
+
+    # remove the dummy 0 ini point
     dist = dist[1:]
-     
+
     return dist, alt
+
 
 def get_terminus_coord(ext_yx, zoutline):
     """This finds the terminus coordinate of the glacier.
@@ -113,12 +117,13 @@ def get_terminus_coord(ext_yx, zoutline):
     xy - coordinates (shapely.geometry.point.Point) of the glacier terminus.
     index: integer, index of the terminus in the input list.
     """
-    # NOTE: possible problems in tidewater because of not constant distance between points
-    
-    perc = 10 # from oggm #cfg.PARAMS['terminus_search_percentile']
-    deltah = 20 #20 problem #50m (?) #cfg.PARAMS['terminus_search_altitude_range']
+    # NOTE: possible problems in tidewater because of not constant distance
+    # between points
 
-    #if gdir.is_tidewater and (perc > 0):
+    perc = 10  # from oggm #cfg.PARAMS['terminus_search_percentile']
+    deltah = 20  # problem #50m(?)#cfg.PARAMS['terminus_search_altitude_range']
+
+    # if gdir.is_tidewater and (perc > 0):
     if min(zoutline) == 0 and perc > 0:
 
         plow = np.percentile(zoutline, perc).astype(np.int64)
@@ -127,7 +132,8 @@ def get_terminus_coord(ext_yx, zoutline):
         mini = np.min(zoutline)
 
         # indices of where in the outline the altitude is lower than the qth
-        # percentile and lower than $delatah meters higher, than the minimum altitude
+        # percentile and lower than $delatah meters higher,
+        # than the minimum altitude
         ind = np.where((zoutline < plow) & (zoutline < (mini + deltah)))[0]
 
         # We take the middle of this area
@@ -152,9 +158,10 @@ def get_terminus_coord(ext_yx, zoutline):
         # find coordinated from ind_term
     xterm = ext_yx[ind_term][0]
     yterm = ext_yx[ind_term][1]
-        
+
     xyterm = shpg.Point(xterm, yterm)
     return xyterm, ind_term
+
 
 def _make_costgrid(mask, ext, z):
     """Computes a costgrid following Kienholz et al. (2014) Eq. (2)
@@ -174,8 +181,8 @@ def _make_costgrid(mask, ext, z):
     f1 = 1000.
     f2 = 3000.
     a = 4.25
-    b = 3.7  
-    
+    b = 3.7
+
     dis = np.where(mask, distance_transform_edt(mask), np.NaN)
     z = np.where(mask, z, np.NaN)
 
@@ -190,11 +197,12 @@ def _make_costgrid(mask, ext, z):
     # This is new: we make the cost to go over boundaries
     # arbitrary high to avoid the lines to jump over adjacent boundaries
     cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
-    #this works but makes the costgrid plot ugly + I dont get why are we doing it
-    #cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
-    
+    # this works but makes the costgrid plot ugly + I dont get why are we
+    # doing it
+    # cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
 
     return np.where(mask, cost, np.Inf)
+
 
 def _polygon_to_pix(polygon):
     """Transforms polygon coordinates to integer pixel coordinates. It makes
@@ -254,14 +262,16 @@ def _polygon_to_pix(polygon):
                     if tmp.is_valid:
                         break
                 if b == 0.99:
-                    raise ValueError('This glacier geometry is not valid for OGGM.')#InvalidGeometryError('This glacier geometry is not '
-                                               #'valid for OGGM.')
+                    raise ValueError('This glacier geometry is not \
+                                     valid for OGGM.')
+    # TODO incorporate InvalidGeometryError
 
     if not tmp.is_valid:
-        raise ValueError('This glacier geometry is not valid for OGGM.')#InvalidGeometryError('This glacier geometry is not '
-                                               #'valid for OGGM.')
+        raise ValueError('This glacier geometry is not valid for OGGM.')
+    # TODO incorporate InvalidGeometryError
 
     return tmp
+
 
 def _filter_lines(lines, heads, k, r):
     """Filter the centerline candidates by length.
@@ -344,6 +354,7 @@ def _filter_lines(lines, heads, k, r):
 
     return olines, oheads
 
+
 def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
     """Filter the centerline candidates by slope: if they go up, remove
     Kienholz et al. (2014), Ch. 4.3.1
@@ -359,9 +370,9 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
     (lines, heads) a list of the new lines and corresponding heads
     """
     import params
-    dx_cls = params.flowline_dx #= cfg.PARAMS['flowline_dx']
-    lid = params.flowline_junction_pix  #int(cfg.PARAMS['flowline_junction_pix'])
-    sw = params.flowline_height_smooth  #cfg.PARAMS['flowline_height_smooth']
+    dx_cls = params.flowline_dx
+    lid = params.flowline_junction_pix
+    sw = params.flowline_height_smooth
 
     # Bilinear interpolation
     # Geometries coordinates are in "pixel centered" convention, i.e
@@ -433,6 +444,7 @@ def _projection_point(centerline, point):
     flow_point = shpg.Point(centerline.line.coords[int(ind_closest)])
     return flow_point
 
+
 def line_order(line):
     """Recursive search for the line's hydrological level.
     Parameters
@@ -448,6 +460,7 @@ def line_order(line):
     else:
         levels = [line_order(s) for s in line.inflows]
         return np.max(levels) + 1
+
 
 def line_interpol(line, dx):
     """Interpolates a shapely LineString to a regularly spaced one.
@@ -507,6 +520,7 @@ def line_interpol(line, dx):
 
     return points
 
+
 def gaussian_blur(in_array, size):
     """Applies a Gaussian filter to a 2d array.
     Parameters
@@ -526,7 +540,7 @@ def gaussian_blur(in_array, size):
     # build kernel
     x, y = np.mgrid[-size:size + 1, -size:size + 1]
     g = np.exp(-(x**2 / float(size) + y**2 / float(size)))
-    g = (g / g.sum()).astype(np.float)#in_array.dtype) #I had to change that
+    g = (g / g.sum()).astype(np.float)  # I had to change that
 
     # do the Gaussian blur
     return scipy.signal.fftconvolve(padded_array, g, mode='valid')
