@@ -31,28 +31,26 @@ try:
 except AttributeError:
     # Old scipy
     from scipy.signal import gaussian
-#------------------------ Import functions ---------
-from functions import (get_terminus_coord, profile, coordinate_change, 
+# ------------------------ Import functions ---------
+from functions import (get_terminus_coord, profile, coordinate_change,
                        _make_costgrid, _polygon_to_pix, _filter_lines,
-                       _filter_lines_slope, _normalize, 
+                       _filter_lines_slope, _normalize,
                        _projection_point, line_order, gaussian_blur)
 
-# libraries to save output
-import gzip
-import pickle
-
-## Comment: from  Kienholtz paper, depression filling is not currently done.
- 
-# TODO:  
-# - error at i=12, see what's happening
+# Comment: from  Kienholtz paper, depression filling is not currently done.
 
 # load parameters to be used (more info in params.py)
 import params
+# load class
+from utils import SuperclassMeta
+
+############################################################
+# TODO: parse params as in OGGM cfg.PARAMS('parameter-name')
 
 q1 = params.q1
-q2 = params.q2 #m
-rmax = params.rmax #m
-localmax_window = params.localmax_window #In units of dx
+q2 = params.q2  # m
+rmax = params.rmax  # m
+localmax_window = params.localmax_window  # In units of dx
 flowline_dx = params.flowline_dx
 flowline_junction_pix = params.flowline_junction_pix
 kbuffer = params.kbuffer
@@ -68,18 +66,18 @@ shape_file = params.shape_file
 smooth_window = params.smooth_window
 single_fl = params.single_fl
 
-#
+############################################################
 
-# this is a variable used in the centerline class, but I don't know what 
+# this is a variable used in the centerline class, but I don't know what
 # is it used for
 GAUSSIAN_KERNEL = dict()
 for ks in [5, 7, 9]:
     kernel = gaussian(ks, 1)
     GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
 
-### Define classes to reuse some functions from original OGGM code
-from utils import SuperclassMeta
 
+##################################################################
+# Define classes to reuse some functions from original OGGM code
 class Centerline(object, metaclass=SuperclassMeta):
     """Geometry (line and widths) and flow rooting properties, but no thickness
     """
@@ -311,17 +309,21 @@ class Centerline(object, metaclass=SuperclassMeta):
                 gk = GAUSSIAN_KERNEL[5]
                 self.flows_to.flux[ide-2:ide+3] += gk * flux[-1]
 
+
 # class defined to be able to use some functions from OGGM "as they are".
 class glacier_dir(object):
     def __init__(self, grid):
         self.grid = grid
 
+
 class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
 
-### FUNCTION: It may have to go to functions.py but it gave some cross 
-# import problems so at the moment I keep it here 
+
+#####################################################################
+# FUNCTION: It may have to go to functions.py but it gave some cross
+# import problems so at the moment I keep it here
 def _join_lines(lines, heads):
     """Re-joins the lines that have been cut by _filter_lines
      Compute the rooting scheme.
@@ -369,6 +371,7 @@ def _join_lines(lines, heads):
 
     return olines[::-1]
 
+################################################################
 # read the geotiff (DEM) with rioxarray.
 dem_path = os.path.join(data_path, dem_file)
 dem = rio.open_rasterio(dem_path)
@@ -399,134 +402,135 @@ if plot:
 # altitude, (xorigin, yorigin, pixelH, pixelW)
 data, pix_params = coordinate_change(dem_path)
 
-# skip glacier i=12 because here is some problem determining the minimum cost trajectory
-#dum = np.arange(12)
-#dum = np.append(dum, np.arange(13, len(crop_extent))) 
-
 # loop over all glaciers
-for i in np.arange(len(crop_extent)): 
-#for i in dum: 
+for i in np.arange(len(crop_extent)):
     print(i)
     # select i-th glacier
     crp1 = crop_extent.iloc[[i]]
-    
+
     # crop the DEM to the outline + a few buffer points. Buffer in meters
     dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
                                crop_extent.crs)
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
-    #dem_clipped.values[0][dem_clipped.values[0] > 32000] = 0
+    # TODO: find a genericway to mask the non realisti values
+    # (I tried abs(dem_clipped.values[0]) > 9000)but I dont get the same values
+    #
+    #
+
+    # dem_clipped.values[0][dem_clipped.values[0] > 32000] = 0
     dem_clipped.values[0][dem_clipped.values[0] < -32000] = 0
-    
-    ### Determine heads and tails ###
+
+    # Determine heads and tails #
     area = crop_extent.geometry[i].area
-    points_yx=crop_extent.geometry.exterior[i].coords #list of outline X,Y coordinates
-    
-    # Circular outline: if the first element is repeated at the end, delete the last one
-    if points_yx[0] == points_yx[-1]:
-        points_yx = points_yx[:-1]
-    
-    # get profile under glacier outline: distance (arbitrary units) - altitude (m)  
-    prof = profile(points_yx, data, pix_params)
-    
-    # get terminus coordinates and position (index) in our data 
-    xyterm, ind_term = get_terminus_coord(points_yx, prof[1]) # get_terminus_coord(yx, zoutline)
+
+    # list of outline X,Y coordinates
+    points_xy = crop_extent.geometry.exterior[i].coords
+
+    # Circular outline: if the first element is repeated at the end,
+    # delete the last one
+    if points_xy[0] == points_xy[-1]:
+        points_xy = points_xy[:-1]
+
+    # get profile under glacier outline: distance
+    # (arbitrary units (?)) - altitude (m)
+    prof = profile(points_xy, data, pix_params)
+
+    # get terminus coordinates and position (index) in our data
+    xyterm, ind_term = get_terminus_coord(points_xy, prof[1])
 
     zoutline = prof[1]
 
-    # TODO:
-    #
-    
-    ## here heads start
+    # here heads start
     # create grid
-    nx = len(dem_clipped.x)
-    ny = len(dem_clipped.y)
-    dx = abs(max(dem_clipped.x) - min(dem_clipped.x))/(nx-1)
-    dy = abs(max(dem_clipped.y) - min(dem_clipped.y))/(ny-1)
-    ulx = min(dem_clipped.x) # this is the center of the pixel!
-    uly = max(dem_clipped.y) # this is the center of the pixel!
-    
+    nx, ny = len(dem_clipped.x), len(dem_clipped.y)
+
     ulx, uly, dx, dy = pix_params
-    
-    ### I dont undersatnd this dx instead of dy ????
-    x0y0 = (ulx + dx/2, uly - dx/2) # To pixel center coordinates
-    
+
+    # Initial topmost-leftmost point
+    # To pixel center coordinates
+    x0y0 = (ulx + dx/2, uly - dy/2)
+
     # try the shapefile curent crs for the raster grid
     utm_proj = salem.check_crs(crop_extent.crs)
-        
-    ### I dont undersatnd this -dx instead of -dy ????
-    grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dx), x0y0=x0y0) 
-     
+
+    # build raster grid properties
+    grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dy), x0y0=x0y0)
+
     # fill gdir class with grid data
     gdir = glacier_dir(grid)
 
     # Size of the half window to use to look for local maxima
-    maxorder = np.rint(localmax_window/dx) #np.rint(cfg.PARAMS['localmax_window'] / gdir.grid.dx)
-    
-    #order: number of points to take at each side. minumum 5, maximum = maxorder
+    maxorder = np.rint(localmax_window/dx)
+
+    # Order: number of points to take at each side.
+    # minumum 5, maximum = maxorder
     maxorder = utils.clip_scalar(maxorder, 5., np.rint((len(zoutline) / 5.)))
     heads_idx = scipy.signal.argrelmax(zoutline, mode='wrap',
                                        order=int(maxorder))
     if single_fl or len(heads_idx[0]) <= 1:
         # small glaciers with one or less heads: take the absolute max
         heads_idx = (np.atleast_1d(np.argmax(zoutline)),)
-    
+
+    # TODO:
+    # if is tidewater:
+    #    do something
+
     # Remove the heads that are too low
-    zglacier = dem_clipped.values[dem_clipped.values != 0] 
+    zglacier = dem_clipped.values[dem_clipped.values != 0]
     head_threshold = np.percentile(zglacier, (1./3.)*100)
     _heads_idx = heads_idx[0][np.where(zoutline[heads_idx] > head_threshold)]
-    
+
     if len(_heads_idx) == 0:
         # this is for bad ice caps where the outline is far off in altitude
         _heads_idx = [heads_idx[0][np.argmax(zoutline[heads_idx])]]
     heads_idx = _heads_idx
-    
-    headsx = np.array(0)
-    headsy = np.array(0)
+
+    # TODO: undo the loop, do something like this
+    # headsxx = gpd.GeoDataFrame(points_xy)[0]
+    # headsyy = gpd.GeoDataFrame(points_x)[1]
+
+    headsx = headsy = np.array(0)
 
     for j in heads_idx:
-        headsy = np.append(headsy, points_yx[int(j)][1])
-        headsx = np.append(headsx, points_yx[int(j)][0])
- 
-    headsx = headsx[1:]
-    headsy = headsy[1:]
+        headsy = np.append(headsy, points_xy[int(j)][1])
+        headsx = np.append(headsx, points_xy[int(j)][0])
+
+    headsx, headsy = headsx[1:], headsy[1:]
     heads_z = zoutline[heads_idx]
-    
+
     # careful, the coords are in y, x order!
     heads = [shpg.Point(x, y) for y, x in zip(headsy,
                                               headsx)]
-    
-    #radius for descarting heads
-    radius = q1 * area + q2 
-    radius = utils.clip_scalar(radius, 0, rmax) 
-    radius /= grid.dx # radius in raster coordinates
 
-    ## params taken from default OGGM values  
+    # radius for descarting heads
+    radius = q1 * area + q2
+    radius = utils.clip_scalar(radius, 0, rmax)
+    radius /= grid.dx   # radius in raster coordinates
+    # (warning: this is assuming |xd| = |dy|)
+
+    # parameters taken from default OGGM values
     # Plus our criteria, quite useful to remove short lines:
-    radius += flowline_junction_pix * flowline_dx #cfg.PARAMS['flowline_junction_pix'] * cfg.PARAMS['flowline_dx']
-    
+    radius += flowline_junction_pix * flowline_dx
+
     # OK. Filter and see.
     glacier_poly_hr = crop_extent.geometry[i]
-    
+
     # heads' coordinates and altitude
-    heads, heads_z = _filter_heads(heads, list(heads_z), float(radius), \
+    heads, heads_z = _filter_heads(heads, list(heads_z), float(radius),
                                    glacier_poly_hr)
-    
-    #if some head removed:
-    headsx=np.zeros(1)
-    headsy=np.zeros(1)
-    for k in np.arange(len(heads)):
-        headsy = np.append(headsy, heads[k].y)
-        headsx = np.append(headsx, heads[k].x)
-         
-    headsx = headsx[1:]
-    headsy = headsy[1:]
-    
+
+    # after head filtering, refill heads xy coordinates:
+    headsx = headsy = np.zeros(1)
+
+    for khead in heads:
+        headsy = np.append(headsy, khead.y)
+        headsx = np.append(headsx, khead.x)
+
+    headsx, headsy = headsx[1:], headsy[1:]
+
     # topography on glacier
     z = dem_clipped.values[0]
-    
-    # glacier (polygon) (for some reason i have to keep the index 'i' and i cannot use just [0])
-    #glacier_poly_hr = crp1.geometry[i]
 
 # Rounded nearest pix
     glacier_poly_pix = _polygon_to_pix(glacier_poly_hr)
@@ -534,49 +538,49 @@ for i in np.arange(len(crop_extent)):
     tuple2int = partial(np.array, dtype=np.int64)
 
     # Compute the glacier mask (currently: center pixels + touched)
-    #glacier_mask = mask.values[0]
     glacier_mask = np.zeros((ny, nx), dtype=np.uint8)
     glacier_ext = np.zeros((ny, nx), dtype=np.uint8)
     (x, y) = glacier_poly_pix.exterior.xy
-    
-    #transform coordinates to pixels and assign to 1 inside, 0 otherwise
-    xx, yy = grid.transform(x, y, crs = utm_proj)
-    
+
+    # transform coordinates to pixels and assign to 1 inside, 0 otherwise
+    xx, yy = grid.transform(x, y, crs=utm_proj)
+
     # I have added a np.clip because some errors when regridding data
     xx = np.clip(xx, 0, glacier_mask.shape[1] - 1)
     yy = np.clip(yy, 0, glacier_mask.shape[0] - 1)
     glacier_mask[skdraw.polygon(np.array(yy), np.array(xx))] = 1 #1 inside plygon
-    
+
     for gint in glacier_poly_pix.interiors:
-         x, y = tuple2int(gint.xy)
-         xx, yy = grid.transform(x, y, crs=utm_proj)
-         xx, yy = np.round(xx), np.round(yy)
-         xx, yy = xx.astype(int), yy.astype(int)
-         glacier_mask[skdraw.polygon(yy, xx)] = 0 # inside the nunataks
-         glacier_mask[yy, xx] = 0  # onto nunatacks boundaries
-    
+        x, y = tuple2int(gint.xy)
+        xx, yy = grid.transform(x, y, crs=utm_proj)
+        xx, yy = np.round(xx), np.round(yy)
+        xx, yy = xx.astype(int), yy.astype(int)
+        glacier_mask[skdraw.polygon(yy, xx)] = 0  # inside the nunataks
+        glacier_mask[yy, xx] = 0  # onto nunatacks boundaries
+
     x, y = tuple2int(glacier_poly_pix.exterior.xy)
 
-    #project xy to our local (raster) grid
-    xx, yy = grid.transform(x,y,crs=utm_proj)
+    # project xy to our local (raster) grid
+    xx, yy = grid.transform(x, y, crs=utm_proj)
     xx, yy = np.round(xx), np.round(yy)
     xx, yy = xx.astype(int), yy.astype(int)
-    
+
     # I have added a np.clip because some errors when regridding data
     xx = np.clip(xx, 0, glacier_mask.shape[1]-1)
     yy = np.clip(yy, 0, glacier_mask.shape[0]-1)
-    
-    glacier_mask[yy, xx] = 1 # glacier bundaries belong to the glacier
-    glacier_ext[yy, xx] = 1  
-    
-#####------------------------- Compute centerlines --------------------
+
+    glacier_mask[yy, xx] = 1  # glacier bundaries belong to the glacier
+    glacier_ext[yy, xx] = 1
+
+############################################################
+# Compute centerlines
     # Cost array
     costgrid = _make_costgrid(glacier_mask, glacier_ext, z)
 
     # Terminus
     t_coord = xyterm
-    
-    # Compute the least cost routes
+
+    # Compute the least cost routes for all possible head-terminus trajectories
     lines = []
     heads_pix = []
     count = 0
@@ -584,33 +588,36 @@ for i in np.arange(len(crop_extent)):
         try:
             h_coord_pix = np.array(grid.transform(h.x, h.y, crs=utm_proj))
             h_coord_pix = np.round(h_coord_pix).astype(int)
-            t_coord_pix = np.array(grid.transform(t_coord.x, t_coord.y, crs=utm_proj))
+            t_coord_pix = np.array(grid.transform(t_coord.x,
+                                                  t_coord.y, crs=utm_proj))
             t_coord_pix = np.round(t_coord_pix).astype(int)
             heads_pix.append(shpg.Point(h_coord_pix))
-         
-            indices, _ = route_through_array(costgrid, np.roll(h_coord_pix,1), np.roll(t_coord_pix,1))
+
+            indices, _ = route_through_array(costgrid, np.roll(h_coord_pix, 1),
+                                             np.roll(t_coord_pix, 1))
             lines.append(shpg.LineString(np.array(indices)[:, [1, 0]]))
         except:
             print("There is a problem when computing the least-cost route")
-            #raise Exception("There is a problem when computing the least-cost route")
+            # raise Exception("There is a problem when computing
+            # the least-cost route")
             count += 1
         finally:
             print(".")
-    print(str(count) + " centerlines out of " + str(len(heads)) + " were not able to be computed" )
-    
+    print(str(count) + " centerlines out of " + str(len(heads)) +
+          " were not able to be computed")
+
     # Filter the shortest lines out
-    dx_cls = flowline_dx #cfg.PARAMS['flowline_dx']
-    radius = flowline_junction_pix * dx_cls #cfg.PARAMS['flowline_junction_pix'] * dx_cls
+    dx_cls = flowline_dx
+    radius = flowline_junction_pix * dx_cls
     radius += 6 * dx_cls
-    
-    #heads in raster coordinates:   
-    olines, oheads = _filter_lines(lines, heads_pix, kbuffer, radius) #cfg.PARAMS['kbuffer'], radius)
+
+    # heads in raster coordinates:
+    olines, oheads = _filter_lines(lines, heads_pix, kbuffer, radius)
 
     # Filter the lines which are going up instead of down
     min_slope = np.deg2rad(min_slope_flowline_filter)
-    do_filter_slope = filter_min_slope
 
-    if do_filter_slope:
+    if filter_min_slope:
         topo = z
         olines, oheads = _filter_lines_slope(olines, oheads, topo,
                                              gdir, min_slope)
@@ -626,83 +633,78 @@ for i in np.arange(len(crop_extent)):
     cls = []
     for k in np.argsort([cl.order for cl in olines]):
         cls.append(olines[k])
-    
-    if plot: #(this is provisional, for checking urposes only)
+
+    # transformm raster to geographical coordinates
+    cls[0].line.xy   # this is in raster coordinates
+    cls_xy = []
+
+    for li in cls:
+        # ij_to_xy
+        ii = np.array(li.line.xy[0])
+        jj = np.array(li.line.xy[1])
+        x = ulx + ii * dx
+        y = uly - jj * dy
+
+        xy = np.zeros((len(x), 2))
+
+        xy[:, 0] = x
+        xy[:, 1] = y
+
+        lxy = shpg.LineString(xy)
+
+        cls_xy.append(lxy)
+
+    # save as shapefile
+    multiline = shpg.MultiLineString(cls_xy)  # lines merged in a multiline
+
+    # transform to geodataframe and save as shapefile
+    # TODO: add the projection when saving!
+    gpdmultil = gpd.GeoSeries(multiline)
+    gpdmultil.to_file(driver='ESRI Shapefile',
+                      filename="./tmp_centerlines.shp")
+
+###############################################################
+    if plot:  # (this is provisional, for checking urposes only)
         # plot profile
-        #plot profile + terminus + heads:
-        ## NOTE: in this plot, removed heads are displayed anyway.
-        #plt.plot(prof[0], zoutline, '-+') #horizontal distance vs altitude
-        #plt.plot(prof[0][ind_term], zoutline[ind_term], 'r*', label="terminus") #terminus
-        #plt.plot(prof[0][heads_idx], zoutline[heads_idx], 'g*', label="head") #head
-        #plt.xlabel("Distance along outline (a.u.)")
-        #plt.ylabel("Altitude (m)")
-        #plt.legend()
-        #plt.show()
-            
-        #plot altitude raster
+        # plot profile + terminus + heads:
+        # NOTE: in this plot, removed heads are displayed anyway.
+        plt.plot(prof[0], zoutline, '-+')   # horizontal distance vs altitude
+        plt.plot(prof[0][ind_term], zoutline[ind_term],
+                 'r*', label="terminus")  # terminus
+        plt.plot(prof[0][heads_idx], zoutline[heads_idx],
+                 'g*', label="head")  # head
+        plt.xlabel("Distance along outline (a.u.)")
+        plt.ylabel("Altitude (m)")
+        plt.legend()
+        plt.show()
+
+        # plot altitude raster
         f, ax = plt.subplots(figsize=(8, 10))
-#        dem_clipped.plot(ax=ax)
-#        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
-#        plt.scatter(headsx,headsy, marker="*",s=1000, c="g")
-#        plt.scatter(xyterm.x,xyterm.y, marker="*", s=1000, c="r")  
-#        crp1.boundary.plot(ax=ax)
-#        plt.show()
-        
-       
+        dem_clipped.plot(ax=ax)
+        ax.set(title="Raster Layer Cropped to Geodataframe Extent")
+        plt.scatter(headsx, headsy, marker="*", s=1000, c="g")
+        plt.scatter(xyterm.x, xyterm.y, marker="*", s=1000, c="r")
+        crp1.boundary.plot(ax=ax)
+        plt.show()
+
         # plot costgrid
         plt.imshow(costgrid)
         plt.colorbar()
 
-        plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1], marker="*",s=100, c="g")
-        if len(lines) > 1 :
-            plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1], marker="*",s=100, c="g")
-        plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*", s=100, c="r") 
-        
-        plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o", s=5000/(nx*ny), c="y")
-        #if len(lines) > 1 :
-        #    plt.scatter(lines[1].xy[0], lines.xy[1], marker="o", s=5000/(nx*ny), c="y") 
+        plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
+                    marker="*", s=100, c="g")
+        if len(lines) > 1:
+            plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1],
+                        marker="*", s=100, c="g")
+        plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*",
+                    s=100, c="r")
 
+        plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o",
+                    s=5000/(nx*ny), c="y")
 
         for lin in np.arange(len(lines)):
-            plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o", s=5000/(nx*ny), c="y") 
-        plt.show() 
-
-# Write centerlines
-# TODO: save it in geographic and not raster coordinates
-#    
-
-# transformm raster to geographical coordinates
-    cls[0].line.xy #this is in raster coordinates
-    cls_xy = []
-
-    for li in cls:  
-    #ij_to_xy
-        i = np.array(li.line.xy[0])     
-        j = np.array(li.line.xy[1])
-        x = ulx + i * dx
-        y = uly - j * dy
-    
-        xy = np.zeros((len(x), 2))
-
-        xy[:,0] = x
-        xy[:,1] = -y
-
-        lxy = shpg.LineString(xy)
-        
-        cls_xy.append(lxy)
-        
-# save lines
-    use_comp = True
-    _open = gzip.open if use_comp else open
-    fp =  out_path + "centerline_glacier_" + str(i) + ".pkl"
-    with _open(fp, 'wb') as f:
-        pickle.dump(cls, f, protocol = 4)
-        
-
-        
-
-
-        
-
-
-        
+            plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o",
+                        s=5000/(nx*ny), c="y")
+        plt.show()
+##############################################################
+# END #
