@@ -9,12 +9,15 @@ import scipy
 import utils as utils
 from utils import lazy_property
 from utils import _filter_heads
+from utils import line_interpol
 import salem
 import shapely.geometry as shpg
 import matplotlib.pyplot as plt
 import os
 import rioxarray as rio
 import geopandas as gpd
+from scipy.interpolate import RegularGridInterpolator
+from scipy.ndimage import gaussian_filter1d
 
 try:
     import skimage.draw as skdraw
@@ -621,6 +624,23 @@ for i in np.arange(len(crop_extent)):
         topo = z
         olines, oheads = _filter_lines_slope(olines, oheads, topo,
                                              gdir, min_slope)
+    # TODO: smooth centerlines according to
+    # https://github.com/OGGM/oggm/blob/548467993d837b450c65220c4acb947f263a9cab/oggm/core/centerlines.py#L1627
+    # Bilinear interpolation
+    # Geometries coordinates are in "pixel centered" convention, i.e
+    # (0, 0) is also located in the center of the pixel
+    xy = (np.arange(0, gdir.grid.ny-0.1, 1),
+          np.arange(0, gdir.grid.nx-0.1, 1))
+    interpolator = RegularGridInterpolator(xy, z)
+
+    lid = int(flowline_junction_pix)
+    fls = []
+
+    sw = flowline_height_smooth
+
+    diag_n_bad_slopes = 0
+    diag_n_pix = 0
+
 
     # And rejoin the cut tails
     olines = _join_lines(olines, oheads)
@@ -633,6 +653,70 @@ for i in np.arange(len(crop_extent)):
     cls = []
     for k in np.argsort([cl.order for cl in olines]):
         cls.append(olines[k])
+
+    for ic, cl in enumerate(cls):
+        points = line_interpol(cl.line, dx)
+
+        # For tributaries, remove the tail
+        if ic < (len(cls)-1):
+            points = points[0:-lid]
+
+        new_line = shpg.LineString(points)
+
+        # Interpolate heights
+        xx, yy = new_line.xy
+        hgts = interpolator((yy, xx))
+        if len(hgts) < 5:
+            raise Exception("some text")
+
+        # If smoothing, this is the moment
+        hgts = gaussian_filter1d(hgts, sw)
+
+        # Clip topography to 0 m a.s.l.
+        utils.clip_min(hgts, 0, out=hgts)
+
+        # Last safeguard here
+        if ic == (len(cls)-1) and ((np.max(hgts) - np.min(hgts)) < 10):
+            raise RuntimeError('Altitude range of main flowline too small: '
+                               '{}'.format(np.max(hgts) - np.min(hgts)))
+
+        # Check for min slope issues and correct if needed
+        do_filter=False
+        if do_filter:
+            # Correct only where glacier
+            hgts = _filter_small_slopes(hgts, dx*gdir.grid.dx, min_slope)
+            isfin = np.isfinite(hgts)
+            if not np.any(isfin):
+                raise GeometryError('This centerline has no positive slopes')
+            diag_n_bad_slopes += np.sum(~isfin)
+            diag_n_pix += len(isfin)
+            perc_bad = np.sum(~isfin) / len(isfin)
+            if perc_bad > 0.8:
+                log.info('({}) more than {:.0%} of the flowline is cropped '
+                         'due to negative slopes.'.format(gdir.rgi_id,
+                                                          perc_bad))
+
+            sp = np.min(np.where(np.isfinite(hgts))[0])
+            while len(hgts[sp:]) < 5:
+                sp -= 1
+            hgts = utils.interp_nans(hgts[sp:])
+            if not (np.all(np.isfinite(hgts)) and len(hgts) >= 5):
+                raise GeometryError('Something went wrong in flowline init')
+            new_line = shpg.LineString(points[sp:])
+
+        sl = Centerline(new_line, dx=dx, surface_h=hgts,
+                        orig_head=cl.orig_head, rgi_id=gdir.rgi_id,
+                        map_dx=gdir.grid.dx)
+        sl.order = cl.order
+        fls.append(sl)
+
+    # All objects are initialized, now we can link them.
+    for cl, fl in zip(cls, fls):
+        fl.orig_centerline_id = id(cl)
+        if cl.flows_to is None:
+            continue
+        fl.set_flows_to(fls[cls.index(cl.flows_to)])
+
 
     # transformm raster to geographical coordinates
     cls[0].line.xy   # this is in raster coordinates
