@@ -38,7 +38,8 @@ except AttributeError:
 from functions import (get_terminus_coord, profile, coordinate_change,
                        _make_costgrid, _polygon_to_pix, _filter_lines,
                        _filter_lines_slope, _normalize,
-                       _projection_point, line_order, gaussian_blur)
+                       _projection_point, line_order, gaussian_blur,
+                       _chaikins_corner_cutting)
 
 # Comment: from  Kienholtz paper, depression filling is not currently done.
 
@@ -46,6 +47,10 @@ from functions import (get_terminus_coord, profile, coordinate_change,
 import params
 # load class
 from utils import SuperclassMeta
+
+from shapely.ops import transform as shp_trafo
+
+import shapely.affinity as shpa
 
 ############################################################
 # TODO: parse params as in OGGM cfg.PARAMS('parameter-name')
@@ -416,7 +421,7 @@ for i in np.arange(len(crop_extent)):
                                crop_extent.crs)
 
     # assign some value to outside crop: e.g. 0 (default number is too large)
-    # TODO: find a genericway to mask the non realisti values
+    # TODO: find a genericway to mask the non realistic values
     # (I tried abs(dem_clipped.values[0]) > 9000)but I dont get the same values
     #
     #
@@ -475,8 +480,7 @@ for i in np.arange(len(crop_extent)):
         # small glaciers with one or less heads: take the absolute max
         heads_idx = (np.atleast_1d(np.argmax(zoutline)),)
 
-    # TODO:
-    # if is tidewater:
+    # TODO: if is tidewater:
     #    do something
 
     # Remove the heads that are too low
@@ -609,11 +613,60 @@ for i in np.arange(len(crop_extent)):
     print(str(count) + " centerlines out of " + str(len(heads)) +
           " were not able to be computed")
 
+###############################
+ # TODO: line postprocessing according to https://github.com/OGGM/oggm/blob/e7c90e9cb90c0a8a1767e4111fb2d18cc01ac007/oggm/utils/_workflow.py#L722-L748
+
+    
     # Filter the shortest lines out
     dx_cls = flowline_dx
     radius = flowline_junction_pix * dx_cls
     radius += 6 * dx_cls
 
+###############################
+ # TODO: line postprocessing according to https://github.com/OGGM/oggm/blob/e7c90e9cb90c0a8a1767e4111fb2d18cc01ac007/oggm/utils/_workflow.py#L722-L748
+  
+    tra_func = partial(gdir.grid.transform, crs=crop_extent.crs)
+    exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[0].exterior))
+    #exterior = shpg.Polygon(crop_extent.geometry[0].exterior)
+    
+    liness = []
+    for j, line in enumerate(lines):
+        mm = 1 if j == (len(lines)-1) else 0
+    
+        ensure_exterior_match = True
+        if ensure_exterior_match:
+            # Extend line at the start by 10
+            fs = shpg.LineString(line.coords[:2])
+            # First check if this is necessary - this segment should
+            # be within the geometry or it's already good to go
+            if fs.within(exterior):
+                fs = shpa.scale(fs, xfact=3, yfact=3, origin=fs.boundary.geoms[1])
+                line = shpg.LineString([*fs.coords, *line.coords[2:]])
+            # If last also extend at the end
+            if mm == 1:  # mm means main
+                ls = shpg.LineString(line.coords[-2:])
+                if ls.within(exterior):
+                    ls = shpa.scale(ls, xfact=3, yfact=3, origin=ls.boundary.geoms[0])
+                    line = shpg.LineString([*line.coords[:-2], *ls.coords])
+        
+            # Simplify and smooth?
+            simplify_line = True
+            if simplify_line:
+                line = line.simplify(simplify_line)
+            corner_cutting = True
+            if corner_cutting:
+                line = _chaikins_corner_cutting(line, corner_cutting)
+        
+            # Intersect with exterior geom
+            line = line.intersection(exterior)
+            if line.type == 'MultiLineString':
+                # Take the longest
+                lens = [il.length for il in line.geoms]
+                line = line.geoms[np.argmax(lens)]
+            print(line.xy)
+        liness.append(line)
+    
+    lines = liness
     # heads in raster coordinates:
     olines, oheads = _filter_lines(lines, heads_pix, kbuffer, radius)
 
@@ -624,104 +677,145 @@ for i in np.arange(len(crop_extent)):
         topo = z
         olines, oheads = _filter_lines_slope(olines, oheads, topo,
                                              gdir, min_slope)
+        
+#############################################################################
     # TODO: smooth centerlines according to
     # https://github.com/OGGM/oggm/blob/548467993d837b450c65220c4acb947f263a9cab/oggm/core/centerlines.py#L1627
     # Bilinear interpolation
+    
     # Geometries coordinates are in "pixel centered" convention, i.e
     # (0, 0) is also located in the center of the pixel
-    xy = (np.arange(0, gdir.grid.ny-0.1, 1),
-          np.arange(0, gdir.grid.nx-0.1, 1))
-    interpolator = RegularGridInterpolator(xy, z)
+    #xy = (np.arange(0, gdir.grid.ny-0.1, 1),
+    #      np.arange(0, gdir.grid.nx-0.1, 1))
+    #interpolator = RegularGridInterpolator(xy, z)
+#
+#    lid = int(flowline_junction_pix)
+#    fls = []
 
-    lid = int(flowline_junction_pix)
-    fls = []
+    #sw = flowline_height_smooth
 
-    sw = flowline_height_smooth
-
-    diag_n_bad_slopes = 0
-    diag_n_pix = 0
-
+    #diag_n_bad_slopes = 0
+    #diag_n_pix = 0
+#############################################################################
 
     # And rejoin the cut tails
     olines = _join_lines(olines, oheads)
+
+# TODO: put here lines in geo coordinates
+#
+#
 
     # Adds the line level
     for cl in olines:
         cl.order = line_order(cl)
 
-    # And sort them per order !!! several downstream tasks  rely on this
+    # And sort them per order !!! several downstream tasks rely on this
     cls = []
     for k in np.argsort([cl.order for cl in olines]):
         cls.append(olines[k])
 
-    for ic, cl in enumerate(cls):
-        points = line_interpol(cl.line, dx)
+###########################################################################
+    # for ic, cl in enumerate(cls):
+    #     rdx = 1
+    #     points = line_interpol(cl.line, rdx)  # Put dx in raster coordinates (1)
 
-        # For tributaries, remove the tail
-        if ic < (len(cls)-1):
-            points = points[0:-lid]
+    #     # For tributaries, remove the tail
+    #     if ic < (len(cls)-1):  # should I order the lines by length first?
+    #         points = points[0:-lid]
 
-        new_line = shpg.LineString(points)
+    #     new_line = shpg.LineString(points)
 
-        # Interpolate heights
-        xx, yy = new_line.xy
-        hgts = interpolator((yy, xx))
-        if len(hgts) < 5:
-            raise Exception("some text")
+    #     # Interpolate heights
+    #     xx, yy = new_line.xy
+    #     hgts = interpolator((yy, xx))
+    #     if len(hgts) < 5:
+    #         raise Exception("some text")
 
-        # If smoothing, this is the moment
-        hgts = gaussian_filter1d(hgts, sw)
+    #     # If smoothing, this is the moment
+    #     hgts = gaussian_filter1d(hgts, sw)
 
-        # Clip topography to 0 m a.s.l.
-        utils.clip_min(hgts, 0, out=hgts)
+    #     # Clip topography to 0 m a.s.l.
+    #     utils.clip_min(hgts, 0, out=hgts)
 
-        # Last safeguard here
-        if ic == (len(cls)-1) and ((np.max(hgts) - np.min(hgts)) < 10):
-            raise RuntimeError('Altitude range of main flowline too small: '
-                               '{}'.format(np.max(hgts) - np.min(hgts)))
+    #     # Last safeguard here
+    #     if ic == (len(cls)-1) and ((np.max(hgts) - np.min(hgts)) < 10):
+    #         raise RuntimeError('Altitude range of main flowline too small: '
+    #                            '{}'.format(np.max(hgts) - np.min(hgts)))
 
-        # Check for min slope issues and correct if needed
-        do_filter=False
-        if do_filter:
-            # Correct only where glacier
-            hgts = _filter_small_slopes(hgts, dx*gdir.grid.dx, min_slope)
-            isfin = np.isfinite(hgts)
-            if not np.any(isfin):
-                raise GeometryError('This centerline has no positive slopes')
-            diag_n_bad_slopes += np.sum(~isfin)
-            diag_n_pix += len(isfin)
-            perc_bad = np.sum(~isfin) / len(isfin)
-            if perc_bad > 0.8:
-                log.info('({}) more than {:.0%} of the flowline is cropped '
-                         'due to negative slopes.'.format(gdir.rgi_id,
-                                                          perc_bad))
+    #     # Check for min slope issues and correct if needed
+    #     do_filter=False
+    #     if do_filter:
+    #         # Correct only where glacier
+    #         hgts = _filter_small_slopes(hgts, dx*gdir.grid.dx, min_slope)
+    #         isfin = np.isfinite(hgts)
+    #         if not np.any(isfin):
+    #             raise GeometryError('This centerline has no positive slopes')
+    #         diag_n_bad_slopes += np.sum(~isfin)
+    #         diag_n_pix += len(isfin)
+    #         perc_bad = np.sum(~isfin) / len(isfin)
+    #         if perc_bad > 0.8:
+    #             log.info('({}) more than {:.0%} of the flowline is cropped '
+    #                      'due to negative slopes.'.format(gdir.rgi_id,
+    #                                                       perc_bad))
 
-            sp = np.min(np.where(np.isfinite(hgts))[0])
-            while len(hgts[sp:]) < 5:
-                sp -= 1
-            hgts = utils.interp_nans(hgts[sp:])
-            if not (np.all(np.isfinite(hgts)) and len(hgts) >= 5):
-                raise GeometryError('Something went wrong in flowline init')
-            new_line = shpg.LineString(points[sp:])
+    #         sp = np.min(np.where(np.isfinite(hgts))[0])
+    #         while len(hgts[sp:]) < 5:
+    #             sp -= 1
+    #         hgts = utils.interp_nans(hgts[sp:])
+    #         if not (np.all(np.isfinite(hgts)) and len(hgts) >= 5):
+    #             raise GeometryError('Something went wrong in flowline init')
+    #         new_line = shpg.LineString(points[sp:])
 
-        sl = Centerline(new_line, dx=dx, surface_h=hgts,
-                        orig_head=cl.orig_head, rgi_id=gdir.rgi_id,
-                        map_dx=gdir.grid.dx)
-        sl.order = cl.order
-        fls.append(sl)
+    #     sl = Centerline(new_line, dx=dx, surface_h=hgts,
+    #                     orig_head=cl.orig_head, rgi_id='none',  # gdir.rgi_id,
+    #                     map_dx=gdir.grid.dx)
+    #     sl.order = cl.order
+    #     fls.append(sl)
 
+# I dont understand this:
+    
     # All objects are initialized, now we can link them.
-    for cl, fl in zip(cls, fls):
-        fl.orig_centerline_id = id(cl)
-        if cl.flows_to is None:
-            continue
-        fl.set_flows_to(fls[cls.index(cl.flows_to)])
+ #   for cl, fl in zip(cls, fls):
+ #       fl.orig_centerline_id = id(cl)
+ #       if cl.flows_to is None:
+ #           continue
+ #       fl.set_flows_to(fls[cls.index(cl.flows_to)])
 
+    # # transformm raster to geographical coordinates
+    # cls[0].line.xy   # this is in raster coordinates
+    # fls_xy = []
 
-    # transformm raster to geographical coordinates
-    cls[0].line.xy   # this is in raster coordinates
+    # for li in fls:
+    #     # ij_to_xy
+    #     ii = np.array(li.line.xy[0])
+    #     jj = np.array(li.line.xy[1])
+    #     x = ulx + ii * dx
+    #     y = uly - jj * dy
+
+    #     xy = np.zeros((len(x), 2))
+
+    #     xy[:, 0] = x
+    #     xy[:, 1] = y
+
+    #     lxy = shpg.LineString(xy)
+
+    #     fls_xy.append(lxy)
+
+    # # save as shapefile
+    # multilinef = shpg.MultiLineString(fls_xy)  # lines merged in a multiline
+
+    # # transform to geodataframe and save as shapefile
+    # gpdmultil = gpd.GeoSeries(multilinef)
+    
+    # # add crs
+    # gpdmultil.crs = crop_extent.crs
+    
+    # # save object
+    # gpdmultil.to_file(driver='ESRI Shapefile',
+    #                   filename="./tmp_centerlines.shp")
+#############################################################################
+
     cls_xy = []
-
     for li in cls:
         # ij_to_xy
         ii = np.array(li.line.xy[0])
@@ -737,15 +831,20 @@ for i in np.arange(len(crop_extent)):
         lxy = shpg.LineString(xy)
 
         cls_xy.append(lxy)
-
+   
+###############################
     # save as shapefile
-    multiline = shpg.MultiLineString(cls_xy)  # lines merged in a multiline
+    multilinec = shpg.MultiLineString(cls_xy)  # lines merged in a multiline
 
     # transform to geodataframe and save as shapefile
-    # TODO: add the projection when saving!
-    gpdmultil = gpd.GeoSeries(multiline)
+    gpdmultil = gpd.GeoSeries(multilinec)
+    
+    # add crs
+    gpdmultil.crs = crop_extent.crs
+    
+    # save object
     gpdmultil.to_file(driver='ESRI Shapefile',
-                      filename="./tmp_centerlines.shp")
+                      filename="./tmp_centerlines_old.shp")
 
 ###############################################################
     if plot:  # (this is provisional, for checking urposes only)

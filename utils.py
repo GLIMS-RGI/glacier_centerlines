@@ -213,3 +213,10 @@ def line_interpol(line, dx):
         points.append(pbs[int(p[0])])
 
     return points
+
+
+# A faster numpy.clip when only one value is clipped (here: min).
+clip_min = np.core.umath.maximum
+
+# A faster numpy.clip when only one value is clipped (here: max).
+clip_max = np.core.umath.minimum
