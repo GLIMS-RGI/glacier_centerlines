@@ -13,7 +13,8 @@ from scipy.interpolate import RegularGridInterpolator
 import copy
 from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
-
+import geopandas as gpd
+#from main import Centerline
 
 def coordinate_change(tif_path):
     """
@@ -390,7 +391,7 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
         points = line_interpol(line, dx_cls)
 
         # For tributaries, remove the tail
-        points = points[0:-lid]
+        #points = points[0:-lid]
 
         new_line = shpg.LineString(points)
 
@@ -563,3 +564,35 @@ def _chaikins_corner_cutting(line, refinements=5):
         coords = L * 0.75 + R * 0.25
 
     return shpg.LineString(coords)
+
+
+def save_lines(lines, file_name, crs):
+    """
+    Given lines and a name of file, centerlines are saved as multiline.
+    
+    Parameters
+    ----------
+    lines : list of shapely.geometry.linestring.LineString
+        Centerlines coming from the centerline algorithm.
+    file_name : string
+        Name of file to be saved to.
+    crs : pyproj.crs.crs.CRS
+        projection to be saved to.
+        
+    Returns
+    -------
+    Saves file as 'file_name'. 
+
+    """
+    # save as shapefile
+    multilinec = shpg.MultiLineString(lines)  # lines merged in a multiline
+
+    # transform to geodataframe and save as shapefile
+    gpdmultil = gpd.GeoSeries(multilinec)
+    
+    # add crs
+    gpdmultil.crs = crs
+    
+    # save object
+    gpdmultil.to_file(driver='ESRI Shapefile',
+                      filename=file_name)

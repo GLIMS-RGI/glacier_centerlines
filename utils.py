@@ -6,7 +6,6 @@ import numpy as np
 import copy
 from functools import (wraps)
 
-
 def nicenumber(number, binsize, lower=False):
     """Returns the next higher or lower "nice number", given by binsize.
     Examples:
@@ -220,3 +219,23 @@ clip_min = np.core.umath.maximum
 
 # A faster numpy.clip when only one value is clipped (here: max).
 clip_max = np.core.umath.minimum
+
+def cls_to_geoline(cls):
+    """
+    list of Centerline object to list of shapely.geometry.lines
+
+    Parameters
+    ----------
+    cls : list of centerlines
+        list of centerlines instances.
+
+    Returns
+    -------
+    list of shapely.geometry.lines
+
+    """
+    liness = []
+    for cl in cls:
+        liness.append(cl.line)
+    lines = liness
+    return lines
