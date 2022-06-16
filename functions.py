@@ -326,7 +326,6 @@ def _filter_lines(lines, heads, k, r):
                     diff = shpg.LineString(l.coords[0:2] + diff.coords[2:])
                     tokeep.append(diff)
             ilines = tokeep
-
         # it could happen that we're done at this point
         if len(ilines) == 0:
             break
@@ -348,10 +347,14 @@ def _filter_lines(lines, heads, k, r):
 
     # add the corresponding head to each line
     for l in olines:
-        for h in heads:
-            if l.intersects(h):
-                oheads.append(h)
-                break
+#        for h in heads:
+#            if l.intersects(h):
+#                oheads.append(h)
+#                break
+            oheads.append(l.coords[-1]) # assign first point as head of the centerline
+    print(len(oheads)) # --> here is the problem!!! there are only 12 heads that remain 
+    # in the same position after the smoothing! I dont know how to fix it. --> recompute heads?
+    print(len(olines))
 
     return olines, oheads
 
