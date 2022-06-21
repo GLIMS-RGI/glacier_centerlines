@@ -18,6 +18,7 @@ import rioxarray as rio
 import geopandas as gpd
 from shapely.ops import transform as shp_trafo
 import shapely.affinity as shpa
+import shapely.ops as shpo
 
 try:
     import skimage.draw as skdraw
@@ -325,100 +326,120 @@ class grid_inf(object):
     def __init__(self, grid):
         self.grid = grid
 
-def densify_geometry(line_geometry, step, crs=None):
-     '''
-    Add more points to a shapely.geometry.LineString
-    
-    Parameters
-    ----------
-    line_geometry : shalepy.geometry.LineString
-        centerline
-    step : float
-        distance between points, (in pixels)?
-    crs : crs
-        DESCRIPTION. The default is None.
-
-    Returns
-    -------
-    shapely.geometry.LineString
-        DESCRIPTION.
-
-    '''
-     # crs: epsg code of a coordinate reference system you want your line to be georeferenced with
-     # step: add a vertice every step in whatever unit your coordinate reference system use.
- 
-     length_m=line_geometry.length # get the length
- 
-     xy=[] # to store new tuples of coordinates
- 
-     for distance_along_old_line in np.arange(0,int(length_m),step): 
- 
-         point = line_geometry.interpolate(distance_along_old_line) # interpolate a point every step along the old line
-         xp,yp = point.x, point.y # extract the coordinates
- 
-         xy.append((xp,yp)) # and store them in xy list
- 
-     new_line=shpg.LineString(xy) # Here, we finally create a new line with densified points.
-     
-     if crs != None:  #  If you want to georeference your new geometry, uses crs to do the job.
-         new_line_geo=gpd.geoseries.GeoSeries(new_line,crs=crs) 
-         return new_line_geo
- 
-     else:
-         return new_line
      
 #####################################################################
 # FUNCTION: It may have to go to functions.py but it gave some cross
 # import problems so at the moment I keep it here
-def _join_lines(lines, heads):
-    """Re-joins the lines that have been cut by _filter_lines
-     Compute the rooting scheme.
+# def _join_lines(lines, heads):
+#     """Re-joins the lines that have been cut by _filter_lines
+#      Compute the rooting scheme.
+#     Parameters
+#     ----------
+#     lines: list of shapely lines instances
+#     Returns
+#     -------
+#     Centerline instances, updated with flow routing properties
+#      """
+
+#     olines = [Centerline(l, orig_head=h) for l, h
+#               in zip(lines[::-1], heads[::-1])]
+#     nl = len(olines)
+#     if nl == 1:
+#         return olines
+
+#     # per construction the line cannot flow in a line placed before in the list
+#     for i, l in enumerate(olines):
+
+#         last_point = shpg.Point(*l.line.coords[-1])
+
+#         totest = olines[i+1:]
+#         dis = [last_point.distance(t.line) for t in totest]
+#         flow_to = totest[np.argmin(dis)]
+
+#         flow_point = _projection_point(flow_to, last_point)
+
+#         # Interpolate to finish the line, bute force:
+#         # we interpolate 20 points, round them, remove consecutive duplicates
+#         endline = shpg.LineString([last_point, flow_point])
+#         endline = shpg.LineString([endline.interpolate(x, normalized=True)
+#                                    for x in np.linspace(0., 1., num=20)])
+#         # we keep all coords without the first AND the last
+#         #grouped = groupby(map(tuple, np.rint(endline.coords)))
+#         grouped = groupby(map(tuple, endline.coords))
+#         endline = [x[0] for x in grouped][1:-1]
+#         #endline = [x[0] for x in grouped][:] # take all points
+
+#         # We're done
+#         l.set_line(shpg.LineString(l.line.coords[:] + endline))
+#         l.set_flows_to(flow_to, check_tail=False)
+
+#         # The last one has nowhere to flow
+#         if i+2 == nl:
+#             break
+
+#     return olines[::-1]
+
+def cls_intersec_outline(cls, outline):
+    """
+    fine tunning: flowlines must finish onto an outline
+
     Parameters
     ----------
-    lines: list of shapely lines instances
+    lines : list of centerline instances
+        flowlines
+    outline : shapely.geometry.polygon.Polygon in raster coordinates
+        glacier boundaries
+
     Returns
     -------
-    Centerline instances, updated with flow routing properties
-     """
+    modified lines, in form of shapely.lines list (?)
 
-    olines = [Centerline(l, orig_head=h) for l, h
-              in zip(lines[::-1], heads[::-1])]
-    nl = len(olines)
-    if nl == 1:
-        return olines
+    """
+    lis = []
+    for li in cls:
+        bbb = shpo.split(li.line, outline)
+        print(len(bbb.geoms))
+        print(li.line.length)
+        print(len(bbb.geoms))
+        if len(bbb.geoms) != 1:
+            
+            if len(bbb.geoms) == 2: #intersect head only
+                ind=np.argmax([bbb.geoms[0].length, bbb.geoms[1].length])
+                print(list(bbb.geoms))
+                lis.append(bbb.geoms[ind])
+            
+            elif len(bbb.geoms) == 3: # intersect in the head and tail both
+                 ind=np.argmax([bbb.geoms[0].length, 
+                                bbb.geoms[1].length,
+                                bbb.geoms[2].length])
+                 lis.append(bbb.geoms[ind])
 
-    # per construction the line cannot flow in a line placed before in the list
-    for i, l in enumerate(olines):
+            else:
+                 print("Some centerline crosses the outline \
+                                 more than 2 times")
+        else:
+            lis.append(li.line)
+            
+    return lis
 
-        last_point = shpg.Point(*l.line.coords[-1])
+# summ=0
+# for l in cls:
+#     summ =+ l.line.length
+    
+# print(summ)
+ 
+#type(aaa.geoms[0])
+# for i, feat_line in enumerate(feats_lines):
+#     for j, feat_polygon in enumerate(feats_polygons):
+#         if feat_polygon.geometry().intersects(feat_line.geometry()):
+#             geom = feat_polygon.geometry().intersection(feat_line.geometry())
+#             print i, j, (geom.length()/feat_line.geometry().length())*100
+#             feat = QgsFeature()
+#             feat.setAttributes([i])
+#             feat.setGeometry(geom)
+#             prov.addFeatures( [feat] )
 
-        totest = olines[i+1:]
-        dis = [last_point.distance(t.line) for t in totest]
-        flow_to = totest[np.argmin(dis)]
-
-        flow_point = _projection_point(flow_to, last_point)
-
-        # Interpolate to finish the line, bute force:
-        # we interpolate 20 points, round them, remove consecutive duplicates
-        endline = shpg.LineString([last_point, flow_point])
-        endline = shpg.LineString([endline.interpolate(x, normalized=True)
-                                   for x in np.linspace(0., 1., num=20)])
-        # we keep all coords without the first AND the last
-        #grouped = groupby(map(tuple, np.rint(endline.coords)))
-        grouped = groupby(map(tuple, endline.coords))
-        #endline = [x[0] for x in grouped][1:-1]
-        endline = [x[0] for x in grouped][:] # take all points
-
-        # We're done
-        l.set_line(shpg.LineString(l.line.coords[:] + endline))
-        l.set_flows_to(flow_to, check_tail=False)
-
-        # The last one has nowhere to flow
-        if i+2 == nl:
-            break
-
-    return olines[::-1]
-
+    
 ##################
 # move this to utils:
     
@@ -667,8 +688,8 @@ for i in np.arange(len(crop_extent)):
             # raise Exception("There is a problem when computing
             # the least-cost route")
             count += 1
-        finally:
-            print(".")
+        #finally:
+        #    print('')
     print(str(count) + " centerlines out of " + str(len(heads)) +
           " were not able to be computed")
 
@@ -682,7 +703,8 @@ for i in np.arange(len(crop_extent)):
     radius += 6 * dx_cls
 
 ###############################
-# Smooth centerlines  
+
+    # Smooth centerlines  
     tra_func = partial(gdir.grid.transform, crs=crop_extent.crs)
     exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[0].exterior))
     #exterior = shpg.Polygon(crop_extent.geometry[0].exterior)
@@ -713,7 +735,7 @@ for i in np.arange(len(crop_extent)):
                 line = line.simplify(simplify_line)
             corner_cutting = True
             if corner_cutting:
-                line = _chaikins_corner_cutting(line, corner_cutting)
+                line = _chaikins_corner_cutting(line, refinements=5)
         
             # Intersect with exterior geom
             line = line.intersection(exterior)
@@ -724,16 +746,11 @@ for i in np.arange(len(crop_extent)):
         liness.append(line)
     
     lines = liness
+
     # heads in raster coordinates:
     olines, oheads = _filter_lines(lines, heads_pix, kbuffer, radius)
-#tmp
-    #olines=[]
-    #for li in lines:
-    #    olines.append(densify_geometry(li, 0.5))
     
-    
-    #olines=lines
-    #oheads=heads
+
     # Filter the lines which are going up instead of down
     min_slope = np.deg2rad(min_slope_flowline_filter)
 
@@ -741,99 +758,8 @@ for i in np.arange(len(crop_extent)):
         topo = z
         olines, oheads = _filter_lines_slope(olines, oheads, topo,
                                              gdir, min_slope)
-    #breakpoint()
-    #oliness = []
-    #olines = utils.cls_to_geoline(olines)
-    #for li in olines:
-    #    oliness.append(_chaikins_corner_cutting(li, True))
-    #    
-    #olines = oliness
-#############################################################################
-    # TODO: smooth centerlines according to
-    # https://github.com/OGGM/oggm/blob/548467993d837b450c65220c4acb947f263a9cab/oggm/core/centerlines.py#L1627
-    # Bilinear interpolation
-    
-    # Geometries coordinates are in "pixel centered" convention, i.e
-    # (0, 0) is also located in the center of the pixel
-    #xy = (np.arange(0, gdir.grid.ny-0.1, 1),
-    #      np.arange(0, gdir.grid.nx-0.1, 1))
-    #interpolator = RegularGridInterpolator(xy, z)
-#
-#    lid = int(flowline_junction_pix)
-#    fls = []
-
-    #sw = flowline_height_smooth
-
-    #diag_n_bad_slopes = 0
-    #diag_n_pix = 0
-#############################################################################
-
-    #densify main centerline
-    olines[0] = densify_geometry(olines[0], 0.1)
-    
-    #densify the other lines also
-    olines = [densify_geometry(oli, 0.2) for oli in olines] # not so important, less densification 
-    
-    # And rejoin the cut tails
-    olines = _join_lines(olines, oheads) # TODO: i have to modify this to deal with proper merging
-    
-    # lines = utils.cls_to_geoline(olines)
-    
-    # tra_func = partial(gdir.grid.transform, crs=crop_extent.crs)
-    # exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[0].exterior))
-    # #exterior = shpg.Polygon(crop_extent.geometry[0].exterior)
-    
-    # liness = []
-    # for j, line in enumerate(lines):
-    #     mm = 1 if j == (len(lines)-1) else 0
-    
-    #     ensure_exterior_match = True
-    #     if ensure_exterior_match:
-    #         # Extend line at the start by 10
-    #         fs = shpg.LineString(line.coords[:2])
-    #         # First check if this is necessary - this segment should
-    #         # be within the geometry or it's already good to go
-    #         if fs.within(exterior):
-    #             fs = shpa.scale(fs, xfact=3, yfact=3, origin=fs.boundary.geoms[1])
-    #             line = shpg.LineString([*fs.coords, *line.coords[2:]])
-    #         # If last also extend at the end
-    #         if mm == 1:  # mm means main
-    #             ls = shpg.LineString(line.coords[-2:])
-    #             if ls.within(exterior):
-    #                 ls = shpa.scale(ls, xfact=3, yfact=3, origin=ls.boundary.geoms[0])
-    #                 line = shpg.LineString([*line.coords[:-2], *ls.coords])
-        
-    #         # Simplify and smooth?
-    #         simplify_line = True
-    #         if simplify_line:
-    #             line = line.simplify(simplify_line)
-    #         corner_cutting = True
-    #         if corner_cutting:
-    #             line = _chaikins_corner_cutting(line, corner_cutting)
-        
-    #         # Intersect with exterior geom
-    #         line = line.intersection(exterior)
-    #         if line.type == 'MultiLineString':
-    #             # Take the longest
-    #             lens = [il.length for il in line.geoms]
-    #             line = line.geoms[np.argmax(lens)]            
-    #     liness.append(line)
-    
-    # lines = liness
-    
-    # olines = geoline_to_cls(lines)
-    
-    #olines = utils.cls_to_geoline(olines)
-    
-    #oliness = []
-    #for oli in olines: # smooth junction
-    #    line = _chaikins_corner_cutting(oli, corner_cutting)
-    #    oliness.append(line)
-    #olines = oliness
-    
-    #olines = geoline_to_cls(olines)
 # tmp: convert to cls
-    #olines = geoline_to_cls(olines)
+    olines = geoline_to_cls(olines)
 #
     # Adds the line level
     for cl in olines:
@@ -845,55 +771,17 @@ for i in np.arange(len(crop_extent)):
         cls.append(olines[k])
 
 
-#################### to test output:
-    # lines=utils.cls_to_geoline(cls)
-    
-    # tra_func = partial(gdir.grid.transform, crs=crop_extent.crs)
-    # exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[0].exterior))
-    # #exterior = shpg.Polygon(crop_extent.geometry[0].exterior)
-    
-    # liness = []
-    # for j, line in enumerate(lines):
-    #     mm = 1 if j == (len(lines)-1) else 0
-    
-    #     ensure_exterior_match = True
-    #     if ensure_exterior_match:
-    #         # Extend line at the start by 10
-    #         fs = shpg.LineString(line.coords[:2])
-    #         # First check if this is necessary - this segment should
-    #         # be within the geometry or it's already good to go
-    #         if fs.within(exterior):
-    #             fs = shpa.scale(fs, xfact=3, yfact=3, origin=fs.boundary.geoms[1])
-    #             line = shpg.LineString([*fs.coords, *line.coords[2:]])
-    #         # If last also extend at the end
-    #         if mm == 1:  # mm means main
-    #             ls = shpg.LineString(line.coords[-2:])
-    #             if ls.within(exterior):
-    #                 ls = shpa.scale(ls, xfact=3, yfact=3, origin=ls.boundary.geoms[0])
-    #                 line = shpg.LineString([*line.coords[:-2], *ls.coords])
-        
-    #         # Simplify and smooth?
-    #         simplify_line = True
-    #         if simplify_line:
-    #             line = line.simplify(simplify_line)
-    #         corner_cutting = True
-    #         if corner_cutting:
-    #             line = _chaikins_corner_cutting(line, corner_cutting)
-        
-    #         # Intersect with exterior geom
-    #         line = line.intersection(exterior)
-    #         if line.type == 'MultiLineString':
-    #             # Take the longest
-    #             lens = [il.length for il in line.geoms]
-    #             line = line.geoms[np.argmax(lens)]            
-    #     liness.append(line)
-    
-    # lines = liness
-    # todo : lines to centerlines to chenge coordinates using further code down here
-    
-    #save_lines(cls, './tmp.shp', crop_extent.crs)
 ###########################################################################
 
+    lines = cls_intersec_outline(cls, exterior)
+
+    cls = geoline_to_cls(lines)
+    
+    ###### the error about the non matching centerlines-outlines is here!!!
+    # these 2 lines match
+    #save_lines(utils.cls_to_geoline(cls),'centerlines_tmp.shp', crop_extent.crs)
+    #save_lines(exterior.boundary,'boundary.shp', crop_extent.crs)
+    
     cls_xy = []
     for li in cls:
         # ij_to_xy
@@ -911,7 +799,7 @@ for i in np.arange(len(crop_extent)):
 
         cls_xy.append(lxy)
    
-    save_lines(cls_xy, "./tmp.shp", crop_extent.crs)
+    save_lines(cls_xy, "./tmp1.shp", crop_extent.crs)
 
 
 ###############################################################

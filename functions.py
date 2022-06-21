@@ -312,9 +312,9 @@ def _filter_lines(lines, heads, k, r):
                     for il in diff:
                         hashead = False
                         for h in heads:
-                            if il.intersects(h):
-                                hashead = True
-                                diff = il
+                            #if il.intersects(h): # after the smoothing the lines may not finish at the same point "head".
+                            #    hashead = True
+                            #    diff = il
                                 break
                         if hashead:
                             break

@@ -100,7 +100,7 @@ b = 3.7
 
 # Kienholz et al eq (8) but modified here
 # Buffer in pixels where to cut the incoming centerlines
-kbuffer = 2.5
+kbuffer = 1
 
 
 # For water-terminating glaciers, use the percentile instead of minimum h?
