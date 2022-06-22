@@ -787,8 +787,8 @@ for i in np.arange(len(crop_extent)):
         # ij_to_xy
         ii = np.array(li.line.xy[0])
         jj = np.array(li.line.xy[1])
-        x = ulx + ii * dx
-        y = uly - jj * dy
+        x = ulx + ii * dx + 0.5 * dx
+        y = uly - jj * dy - 0.5 * dy
 
         xy = np.zeros((len(x), 2))
 
@@ -799,7 +799,7 @@ for i in np.arange(len(crop_extent)):
 
         cls_xy.append(lxy)
    
-    save_lines(cls_xy, "./tmp1.shp", crop_extent.crs)
+    save_lines(cls_xy, "./tmp2.shp", crop_extent.crs)
 
 
 ###############################################################
