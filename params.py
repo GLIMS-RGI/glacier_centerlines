@@ -8,12 +8,16 @@ is_first_call = False
 #out_path = "/home/francesc/results/glacier_centerlines/"
 data_path = "/home/francesc/data/glacier_centerlines/new_baltoro/"
 out_path = "/home/francesc/results/glacier_centerlines/"
+#data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
+#out_path = "/home/francesc/results/glacier_centerlines/"
 
 #dem_file = "Norway_DEM_sel.tif"
+# dem_file = "dem_balto_tm.tif"
 dem_file = "dem_balto_tm.tif"
 
 # Shapefile file name
 #shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
+shape_file = "11_rgi60_CentralEurope.shp"
 shape_file = "outlines.shp"
 
 ### Input/Output paths. Set to ~ to default to home directory
@@ -167,7 +171,7 @@ store_model_geometry = False
 
 # Single flow: if True, a single, principal flowline is computed. 
 # If False, tributaries are also computed.
-single_fl = False
+single_fl = True
     
 ### Plots 
 # Produce plots in the terminal? True = y; False = n

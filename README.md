@@ -15,7 +15,7 @@ Here are two files to test things on:
 - https://cluster.klima.uni-bremen.de/~oggm/tutorials/Norway_Inventory_sel.zip
 - https://cluster.klima.uni-bremen.de/~oggm/tutorials/Norway_DEM_sel.tif
 
-There are no complex glaciers there, I'll provide a test case based on Baltoro glacier later. This is enough to get started though.
+There are no complex glaciers there. Instead, version v1.0.1 has been tested with Baltoro glacier (Test data in /test_data):
 
 Workflow:
 - assume that the DEM and the outlines are in a cartesian projection (units: m)
@@ -33,10 +33,13 @@ The tools you will need:
 - shapely to do the geometrical stuff (as OGGM does)
 - scipy for the routing algorithm (as OGGM does)
 
-# UPDATE, version 0:
+# UPDATE, version V1.0.1:
+The structure is the same as in version v1.0.0, but several bugs have been fixed, as well as some other additional useful functions have been added, such as
+`utils.cls_to_geoline()`, `main.geoline_to_cls()`, `functions.save_lines()`. 
 
 ## Files:
 - `main.py` : contains all workflow
 - `functions.py` : contains most of the functions that have been taken from oggm plus some others that have been created additionally (`get_terminus()`, `profile()` and `coordinate_change()`)
 - `utils.py` : contains other code that is used mainly as a toolbox.
 - `params.py` : contains all the parameters used in `main.py` so there is no need to modify them in `main.py`
+

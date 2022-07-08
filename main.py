@@ -799,7 +799,7 @@ for i in np.arange(len(crop_extent)):
 
         cls_xy.append(lxy)
    
-    save_lines(cls_xy, "./tmp2.shp", crop_extent.crs)
+    save_lines(cls_xy, out_path + "/11_rgi60_central_europe.shp", crop_extent.crs)
 
 
 ###############################################################
