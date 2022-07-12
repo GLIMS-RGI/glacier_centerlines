@@ -4,21 +4,22 @@
 is_first_call = False
 
 # declare general paths
-#data_path = "/home/francesc/data/glacier_centerlines/"
-#out_path = "/home/francesc/results/glacier_centerlines/"
-data_path = "/home/francesc/data/glacier_centerlines/new_baltoro/"
 out_path = "/home/francesc/results/glacier_centerlines/"
-#data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
-#out_path = "/home/francesc/results/glacier_centerlines/"
 
-#dem_file = "Norway_DEM_sel.tif"
-# dem_file = "dem_balto_tm.tif"
+# Baltoro test data
+data_path = "/home/francesc/data/glacier_centerlines/new_baltoro/"
 dem_file = "dem_balto_tm.tif"
-
-# Shapefile file name
-#shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
-shape_file = "11_rgi60_CentralEurope.shp"
 shape_file = "outlines.shp"
+
+# Norway test data
+#dem_file = "Norway_DEM_sel.tif"
+#data_path = "/home/francesc/data/glacier_centerlines/"
+#shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
+
+# RGI11
+#data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
+#dem_file = 'RGI60-11.00/RGI60-11.00001/NASADEM/dem.tif'
+#shape_file = "11_rgi60_CentralEurope.shp"
 
 ### Input/Output paths. Set to ~ to default to home directory
 
@@ -77,8 +78,7 @@ use_rgi_area = True
 
 # Head determination: (approx) size in meters of the half-size window
 # where to look for maxima
-localmax_window = 500 #In units of dx
-localmax_window = 500.
+localmax_window = 500. #In units of dx
 
 # DEM smoothing: (approx) size in meters of the smoothing window.
 # Set to 0 for no smoothing
@@ -119,17 +119,14 @@ terminus_search_altitude_range = 100
 use_intersects = True
 # Grid spacing of a flowline in pixel coordinates
 flowline_dx = 2
-flowline_dx = 2
+
 # Number of pixels to arbitrarily remove at junctions
-flowline_junction_pix = 3
 flowline_junction_pix = 3
 # Gaussian smooth of the altitude along a flowline
 # sigma, in pixel coordinates (sigma=1 -> smooth around a -4:+4 window)
 flowline_height_smooth = 1
-flowline_height_smooth = 1
 
 # Prevent too small slopes? (see also min_slope param below)
-filter_min_slope = True
 filter_min_slope = True
 
 ### Elevation band flowlines (or "collapsed flowlines") parameters

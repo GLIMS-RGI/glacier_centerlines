@@ -1,9 +1,9 @@
 """
 Francesc Roura Adserias @franra9 from OGGM/core/centerlines.py
 ## https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
-Compute glacier centerlines (flow lines) as in OGGM:
-and https://tc.copernicus.org/articles/8/503/2014/
-https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
+
+Compute glacier centerlines (flow lines) as in here:
+https://tc.copernicus.org/articles/8/503/2014/
 """
 import numpy as np
 import scipy
@@ -29,7 +29,6 @@ try:
     from skimage.graph import route_through_array
 except ImportError:
     pass
-from itertools import groupby
 try:
     from scipy.signal.windows import gaussian
 except AttributeError:
@@ -41,8 +40,6 @@ from functions import (get_terminus_coord, profile, coordinate_change,
                        _filter_lines_slope, _normalize,
                        _projection_point, line_order, gaussian_blur,
                        _chaikins_corner_cutting, save_lines)
-
-# TODO: ? from  Kienholtz paper, depression filling is not currently done.
 
 # load parameters to be used (more info in params.py)
 import params
@@ -74,16 +71,15 @@ single_fl = params.single_fl
 
 ############################################################
 
-# this is a variable used in the centerline class, but I don't know what
-# is it used for
-GAUSSIAN_KERNEL = dict()
-for ks in [5, 7, 9]:
-    kernel = gaussian(ks, 1)
-    GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
+# # this is a variable used in the centerline class.
+# GAUSSIAN_KERNEL = dict()
+# for ks in [5, 7, 9]:
+#     kernel = gaussian(ks, 1)
+#     GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
 
 
 ##################################################################
-# Define classes to reuse some functions from original OGGM code
+# Light version of Centerline class from OGGM
 class Centerline(object, metaclass=SuperclassMeta):
     """Geometry (line and widths) and flow rooting properties, but no thickness
     """
@@ -147,37 +143,6 @@ class Centerline(object, metaclass=SuperclassMeta):
         self.flux_needs_correction = False  # whether this branch was baaad
         self.rgi_id = rgi_id  # Useful if line is used with another glacier
 
-    def set_flows_to(self, other, check_tail=True, to_head=False):
-        """Find the closest point in "other" and sets all the corresponding
-        attributes. Btw, it modifies the state of "other" too.
-        Parameters
-        ----------
-        other : :py:class:`oggm.Centerline`
-            another flowline where self should flow to
-        """
-
-        self.flows_to = other
-
-        if check_tail:
-            # Project the point and Check that its not too close
-            prdis = other.line.project(self.tail, normalized=False)
-            ind_closest = np.argmin(np.abs(other.dis_on_line - prdis)).item()
-            n = len(other.dis_on_line)
-            if n >= 9:
-                ind_closest = utils.clip_scalar(ind_closest, 4, n-5)
-            elif n >= 7:
-                ind_closest = utils.clip_scalar(ind_closest, 3, n-4)
-            elif n >= 5:
-                ind_closest = utils.clip_scalar(ind_closest, 2, n-3)
-            p = shpg.Point(other.line.coords[int(ind_closest)])
-            self.flows_to_point = p
-        elif to_head:
-            self.flows_to_point = other.head
-        else:
-            # just the closest
-            self.flows_to_point = _projection_point(other, self.tail)
-        other.inflow_points.append(self.flows_to_point)
-        other.inflows.append(self)
 
     def set_line(self, line):
         """Update the Shapely LineString coordinate.
@@ -194,127 +159,6 @@ class Centerline(object, metaclass=SuperclassMeta):
         self.head = shpg.Point(xx[0], yy[0])
         self.tail = shpg.Point(xx[-1], yy[-1])
 
-    @lazy_property
-    def flows_to_indice(self):
-        """Indices instead of geometry"""
-
-        ind = []
-        tofind = self.flows_to_point.coords[0]
-        for i, p in enumerate(self.flows_to.line.coords):
-            if p == tofind:
-                ind.append(i)
-        assert len(ind) == 1, 'We expect exactly one point to be found here.'
-        return ind[0]
-
-    @lazy_property
-    def inflow_indices(self):
-        """Indices instead of geometries"""
-
-        inds = []
-        for p in self.inflow_points:
-            ind = [i for (i, pi) in enumerate(self.line.coords)
-                   if (p.coords[0] == pi)]
-            inds.append(ind[0])
-        assert len(inds) == len(self.inflow_points), ('For every inflow point '
-                                                      'there should be '
-                                                      'exactly one inflow '
-                                                      'indice')
-        return inds
-
-    @lazy_property
-    def normals(self):
-        """List of (n1, n2) normal vectors at each point.
-        We use second order derivatives for smoother widths.
-        """
-
-        pcoords = np.array(self.line.coords)
-
-        normals = []
-        # First
-        normal = np.array(pcoords[1, :] - pcoords[0, :])
-        normals.append(_normalize(normal))
-        # Second
-        normal = np.array(pcoords[2, :] - pcoords[0, :])
-        normals.append(_normalize(normal))
-        # Others
-        for (bbef, bef, cur, aft, aaft) in zip(pcoords[:-4, :],
-                                               pcoords[1:-3, :],
-                                               pcoords[2:-2, :],
-                                               pcoords[3:-1, :],
-                                               pcoords[4:, :]):
-            normal = np.array(aaft + 2*aft - 2*bef - bbef)
-            normals.append(_normalize(normal))
-        # One before last
-        normal = np.array(pcoords[-1, :] - pcoords[-3, :])
-        normals.append(_normalize(normal))
-        # Last
-        normal = np.array(pcoords[-1, :] - pcoords[-2, :])
-        normals.append(_normalize(normal))
-
-        return normals
-
-    @property
-    def widths(self):
-        """Needed for overriding later"""
-        return self._widths
-
-    @property
-    def widths_m(self):
-        return self.widths * self.map_dx
-
-    @widths.setter
-    def widths(self, value):
-        self._widths = value
-
-    @property
-    def surface_h(self):
-        """Needed for overriding later"""
-        return self._surface_h
-
-    @surface_h.setter
-    def surface_h(self, value):
-        self._surface_h = value
-
-    def set_apparent_mb(self, mb, mu_star=None):
-        """Set the apparent mb and flux for the flowline.
-        MB is expected in kg m-2 yr-1 (= mm w.e. yr-1)
-        This should happen in line order, otherwise it will be wrong.
-        Parameters
-        ----------
-        mu_star : float
-            if appropriate, the mu_star associated with this apparent mb
-        """
-
-        self.apparent_mb = mb
-        self.mu_star = mu_star
-
-        # Add MB to current flux and sum
-        # no more changes should happen after that
-        flux_needs_correction = False
-        flux = np.cumsum(self.flux + mb * self.widths * self.dx)
-
-        # We filter only lines with two negative grid points,
-        # the rest we can cope with
-        if flux[-2] < 0:
-            flux_needs_correction = True
-
-        self.flux = flux
-        self.flux_needs_correction = flux_needs_correction
-
-        # Add to outflow. That's why it should happen in order
-        if self.flows_to is not None:
-            n = len(self.flows_to.line.coords)
-            ide = self.flows_to_indice
-            if n >= 9:
-                gk = GAUSSIAN_KERNEL[9]
-                self.flows_to.flux[ide-4:ide+5] += gk * flux[-1]
-            elif n >= 7:
-                gk = GAUSSIAN_KERNEL[7]
-                self.flows_to.flux[ide-3:ide+4] += gk * flux[-1]
-            elif n >= 5:
-                gk = GAUSSIAN_KERNEL[5]
-                self.flows_to.flux[ide-2:ide+3] += gk * flux[-1]
-
 
 # class defined to be able to use some functions from OGGM "as they are".
 class glacier_dir(object):
@@ -327,58 +171,6 @@ class grid_inf(object):
         self.grid = grid
 
      
-#####################################################################
-# FUNCTION: It may have to go to functions.py but it gave some cross
-# import problems so at the moment I keep it here
-# def _join_lines(lines, heads):
-#     """Re-joins the lines that have been cut by _filter_lines
-#      Compute the rooting scheme.
-#     Parameters
-#     ----------
-#     lines: list of shapely lines instances
-#     Returns
-#     -------
-#     Centerline instances, updated with flow routing properties
-#      """
-
-#     olines = [Centerline(l, orig_head=h) for l, h
-#               in zip(lines[::-1], heads[::-1])]
-#     nl = len(olines)
-#     if nl == 1:
-#         return olines
-
-#     # per construction the line cannot flow in a line placed before in the list
-#     for i, l in enumerate(olines):
-
-#         last_point = shpg.Point(*l.line.coords[-1])
-
-#         totest = olines[i+1:]
-#         dis = [last_point.distance(t.line) for t in totest]
-#         flow_to = totest[np.argmin(dis)]
-
-#         flow_point = _projection_point(flow_to, last_point)
-
-#         # Interpolate to finish the line, bute force:
-#         # we interpolate 20 points, round them, remove consecutive duplicates
-#         endline = shpg.LineString([last_point, flow_point])
-#         endline = shpg.LineString([endline.interpolate(x, normalized=True)
-#                                    for x in np.linspace(0., 1., num=20)])
-#         # we keep all coords without the first AND the last
-#         #grouped = groupby(map(tuple, np.rint(endline.coords)))
-#         grouped = groupby(map(tuple, endline.coords))
-#         endline = [x[0] for x in grouped][1:-1]
-#         #endline = [x[0] for x in grouped][:] # take all points
-
-#         # We're done
-#         l.set_line(shpg.LineString(l.line.coords[:] + endline))
-#         l.set_flows_to(flow_to, check_tail=False)
-
-#         # The last one has nowhere to flow
-#         if i+2 == nl:
-#             break
-
-#     return olines[::-1]
-
 def cls_intersec_outline(cls, outline):
     """
     fine tunning: flowlines must finish onto an outline
@@ -422,23 +214,6 @@ def cls_intersec_outline(cls, outline):
             
     return lis
 
-# summ=0
-# for l in cls:
-#     summ =+ l.line.length
-    
-# print(summ)
- 
-#type(aaa.geoms[0])
-# for i, feat_line in enumerate(feats_lines):
-#     for j, feat_polygon in enumerate(feats_polygons):
-#         if feat_polygon.geometry().intersects(feat_line.geometry()):
-#             geom = feat_polygon.geometry().intersection(feat_line.geometry())
-#             print i, j, (geom.length()/feat_line.geometry().length())*100
-#             feat = QgsFeature()
-#             feat.setAttributes([i])
-#             feat.setGeometry(geom)
-#             prov.addFeatures( [feat] )
-
     
 ##################
 # move this to utils:
@@ -477,16 +252,22 @@ dem.values[0] = smoothed_dem
 
 # read shapefile (glacier outlines)
 crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
+#crop_extent=crop_extent[crop_extent['RGIId']=='RGI60-11.00001']
 
 # Check that projection is in metre
-import warnings
 try:
     assert crop_extent.crs.axis_info[0].unit_name == 'metre'
-    # TODO: dem crs check in meters
-    #assert crop_extent.crs.axis_info[0].unit_name == 'metre'        
+          
 except Exception:
-    warnings.warn('Projection from input data is not in meters.')
+    raise Exception('Projection from input shapefile data is not in meters.')
 
+# # Check that projection is in metre
+# try:
+#     assert dem.rio.crs.data['units'] == 'm'
+         
+# except Exception:
+#     raise Exception('Projection from input DEM data is not in meters.')
+    
 # view all glaciers at once:
 if plot:
     crop_extent.plot()
@@ -694,9 +475,7 @@ for i in np.arange(len(crop_extent)):
           " were not able to be computed")
 
 ###############################
- # TODO: line postprocessing according to https://github.com/OGGM/oggm/blob/e7c90e9cb90c0a8a1767e4111fb2d18cc01ac007/oggm/utils/_workflow.py#L722-L748
 
-    flowline_junction_pix
     # Filter the shortest lines out
     dx_cls = flowline_dx
     radius = flowline_junction_pix * dx_cls
@@ -771,16 +550,11 @@ for i in np.arange(len(crop_extent)):
         cls.append(olines[k])
 
 
-###########################################################################
+    ##### this can be used to check if all centerlines finish over the outlines
+    #lines = cls_intersec_outline(cls, exterior)
 
-    lines = cls_intersec_outline(cls, exterior)
-
-    cls = geoline_to_cls(lines)
-    
-    ###### the error about the non matching centerlines-outlines is here!!!
-    # these 2 lines match
-    #save_lines(utils.cls_to_geoline(cls),'centerlines_tmp.shp', crop_extent.crs)
-    #save_lines(exterior.boundary,'boundary.shp', crop_extent.crs)
+    #cls = geoline_to_cls(lines)
+    #####
     
     cls_xy = []
     for li in cls:
