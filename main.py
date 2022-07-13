@@ -85,7 +85,7 @@ class Centerline(object, metaclass=SuperclassMeta):
     """
 
     def __init__(self, line, dx=None, surface_h=None, orig_head=None,
-                 rgi_id=None, map_dx=None):
+                  rgi_id=None, map_dx=None):
         """ Initialize a Centerline
         Parameters
         ----------
@@ -158,6 +158,7 @@ class Centerline(object, metaclass=SuperclassMeta):
         xx, yy = line.xy
         self.head = shpg.Point(xx[0], yy[0])
         self.tail = shpg.Point(xx[-1], yy[-1])
+
 
 
 # class defined to be able to use some functions from OGGM "as they are".
@@ -240,51 +241,71 @@ def geoline_to_cls(lines):
 
 
 ################################################################
-# read the geotiff (DEM) with rioxarray.
-dem_path = os.path.join(data_path, dem_file)
-dem = rio.open_rasterio(dem_path)
+all_centerlines = []
 
-# smooth DEM using gaussian smoothing.
-dx = abs(dem.x[0] - dem.x[1])
-gsize = int(np.rint(smooth_window / dx))
-smoothed_dem = gaussian_blur(np.array(dem.values[0]), int(gsize))
-dem.values[0] = smoothed_dem
-
-# read shapefile (glacier outlines)
-crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
-#crop_extent=crop_extent[crop_extent['RGIId']=='RGI60-11.00001']
-
-# Check that projection is in metre
-try:
-    assert crop_extent.crs.axis_info[0].unit_name == 'metre'
-          
-except Exception:
-    raise Exception('Projection from input shapefile data is not in meters.')
-
-# # Check that projection is in metre
-# try:
-#     assert dem.rio.crs.data['units'] == 'm'
-         
-# except Exception:
-#     raise Exception('Projection from input DEM data is not in meters.')
+# crate all RGI ids to loop:
+c=[]
+for i in np.arange(0+1,2+1):
+    a = '0000' + str(i)
+    a=a[-5:]
+    c.append('RGI60-11.' + a)
     
-# view all glaciers at once:
-if plot:
-    crop_extent.plot()
-
-# Get altitude and pixel info: 
-# altitude, (xorigin, yorigin, pixelH, pixelW)
-data, pix_params = coordinate_change(dem_path)
 
 # loop over all glaciers
-for i in np.arange(len(crop_extent)):
-    print(i)
+for i in np.arange(0,2):
+    RGIid = c[i]
+    dem_file = f'RGI60-11.00/{RGIid}/NASADEM/dem.tif'
+    # read the geotiff (DEM) with rioxarray.
+    dem_path = os.path.join(data_path, dem_file)
+    dem = rio.open_rasterio(dem_path)
+    
+    # smooth DEM using gaussian smoothing.
+    dx = abs(dem.x[0] - dem.x[1])
+    gsize = int(np.rint(smooth_window / dx))
+    smoothed_dem = gaussian_blur(np.array(dem.values[0]), int(gsize))
+    dem.values[0] = smoothed_dem
+    
+    # read shapefile (glacier outlines)
+    crop_extent = gpd.read_file(os.path.join(data_path, shape_file))
+    crop_extent=crop_extent[crop_extent['RGIId']==RGIid]
+    
+    crop_extent = crop_extent.to_crs(dem.rio.crs)
+    
+    # Check that projection is in metre
+    try:
+        assert crop_extent.crs.axis_info[0].unit_name == 'metre'
+              
+    except Exception:
+        raise Exception('Projection from input shapefile data is not in meters.')
+    
+    # # Check that projection is in metre
+    # try:
+    #     assert dem.rio.crs.data['units'] == 'm'
+             
+    # except Exception:
+    #     raise Exception('Projection from input DEM data is not in meters.')
+        
+    # view all glaciers at once:
+    if plot:
+        crop_extent.plot()
+    
+    # Get altitude and pixel info: 
+    # altitude, (xorigin, yorigin, pixelH, pixelW)
+    data, pix_params = coordinate_change(dem_path)
+
     # select i-th glacier
-    crp1 = crop_extent.iloc[[i]]
+    crp1 = crop_extent.iloc[[0]]
 
     # crop the DEM to the outline + a few buffer points. Buffer in meters
-    dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping),
-                               crop_extent.crs)
+    dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping), 
+                               crop_extent.crs, drop=False)
+    
+    #dem=dem_clipped
+    # get pix paramaters and topography of the new clipped DEM
+    #dem_clipped.rio.to_raster('.tmp.tif')
+    #data, pix_params = coordinate_change('.tmp.tif')
+
+    #del dum_data
 
     # assign some value to outside crop: e.g. -1 (default number is too large)
     dem_clipped.values[0][dem_clipped.values[0] < 0 ] = -1
@@ -293,8 +314,10 @@ for i in np.arange(len(crop_extent)):
     # Determine heads and tails #
     area = crop_extent.geometry[i].area
 
+
     # list of outline X,Y coordinates
     points_xy = crop_extent.geometry.exterior[i].coords
+
 
     # Circular outline: if the first element is repeated at the end,
     # delete the last one
@@ -313,6 +336,7 @@ for i in np.arange(len(crop_extent)):
     # here heads start
     # create grid
     nx, ny = len(dem_clipped.x), len(dem_clipped.y)
+    #nx, ny = len(dem.x), len(dem.y)
 
     ulx, uly, dx, dy = pix_params
 
@@ -383,6 +407,8 @@ for i in np.arange(len(crop_extent)):
 
     # OK. Filter and see.
     glacier_poly_hr = crop_extent.geometry[i]
+
+
 
     # heads' coordinates and altitude
     heads, heads_z = _filter_heads(heads, list(heads_z), float(radius),
@@ -485,7 +511,7 @@ for i in np.arange(len(crop_extent)):
 
     # Smooth centerlines  
     tra_func = partial(gdir.grid.transform, crs=crop_extent.crs)
-    exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[0].exterior))
+    exterior = shpg.Polygon(shp_trafo(tra_func, crop_extent.geometry[i].exterior))
     #exterior = shpg.Polygon(crop_extent.geometry[0].exterior)
     
     liness = []
@@ -574,6 +600,9 @@ for i in np.arange(len(crop_extent)):
         cls_xy.append(lxy)
    
     save_lines(cls_xy, out_path + "/11_rgi60_central_europe.shp", crop_extent.crs)
+    save_lines(cls_xy, f"./RGI_i.shp", crop_extent.crs)
+    
+    all_centerlines.append(cls_xy)
 
 
 ###############################################################
@@ -621,3 +650,9 @@ for i in np.arange(len(crop_extent)):
         plt.show()
 ##############################################################
 # END #
+
+plt.imshow(costgrid)
+plt.colorbar()
+
+plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
+            marker="*", s=100, c="g")

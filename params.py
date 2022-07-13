@@ -7,9 +7,9 @@ is_first_call = False
 out_path = "/home/francesc/results/glacier_centerlines/"
 
 # Baltoro test data
-data_path = "/home/francesc/data/glacier_centerlines/new_baltoro/"
-dem_file = "dem_balto_tm.tif"
-shape_file = "outlines.shp"
+#data_path = "./test_data/"
+#dem_file = "dem_balto_tm.tif"
+#shape_file = "outlines.shp"
 
 # Norway test data
 #dem_file = "Norway_DEM_sel.tif"
@@ -18,8 +18,12 @@ shape_file = "outlines.shp"
 
 # RGI11
 #data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
-#dem_file = 'RGI60-11.00/RGI60-11.00001/NASADEM/dem.tif'
+#dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
 #shape_file = "11_rgi60_CentralEurope.shp"
+data_path = "/home/francesc/repositories/glacier_centerlines/test_data/"
+dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
+shape_file = "11_rgi60_CentralEurope.shp"
+
 
 ### Input/Output paths. Set to ~ to default to home directory
 

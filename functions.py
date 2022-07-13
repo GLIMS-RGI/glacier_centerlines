@@ -48,7 +48,7 @@ def coordinate_change(tif_path):
     return data, pix_params
 
 
-def profile(points_yx, data, pix_params):
+def profile(points_xy, data, pix_params):
     """
     Parameters
     ----------
@@ -72,7 +72,7 @@ def profile(points_yx, data, pix_params):
     xOrigin, yOrigin, pixelHeight, pixelWidth = pix_params
 
     # altitude
-    for point in points_yx:
+    for point in points_xy:
         col = int((point[0] - xOrigin) / pixelWidth)
         row = int((yOrigin - point[1]) / pixelHeight)
 
@@ -87,14 +87,14 @@ def profile(points_yx, data, pix_params):
     # repeat the first point at the end
     # np.append(points_list, points_list[0])
 
-    for i in np.arange(len(points_yx)):
+    for i in np.arange(len(points_xy)):
         i = int(i)
-        a = shpg.Point(points_yx[i])
+        a = shpg.Point(points_xy[i])
         # last point
-        if i == len(points_yx)-1:
-            d = a.distance(shpg.Point(points_yx[0]))
+        if i == len(points_xy)-1:
+            d = a.distance(shpg.Point(points_xy[0]))
         else:
-            d = a.distance(shpg.Point(points_yx[i+1]))
+            d = a.distance(shpg.Point(points_xy[i+1]))
         dumdist = dumdist + d
         dist = np.append(dist, dumdist)
 
