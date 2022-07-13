@@ -1,0 +1,16 @@
+ASTGTMV3
+
+Original Resolution: 1 arc second (~30m at the equator)
+Date of acquisition: 2000 - 2013
+Date range: 2000-2013
+
+# Literature Citation
+
+NASA/METI/AIST/Japan Spacesystems, and U.S./Japan ASTER Science Team (2019).
+ASTER Global Digital Elevation Model V003 [Data set]. NASA EOSDIS Land
+Processes DAAC. Accessed 20xx-x-x from https://doi.org/10.5067/ASTER/ASTGTM.003
+
+
+# Data files
+
+ASTGTMV003_N47E013_dem.tif
