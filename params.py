@@ -17,10 +17,11 @@ out_path = "/home/francesc/results/glacier_centerlines/"
 #shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 
 # RGI11
-#data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
+data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
 #dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
 #shape_file = "11_rgi60_CentralEurope.shp"
-data_path = "/home/francesc/repositories/glacier_centerlines/test_data/"
+
+#data_path = "/home/francesc/repositories/glacier_centerlines/test_data/"
 dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
 shape_file = "11_rgi60_CentralEurope.shp"
 
@@ -176,4 +177,4 @@ single_fl = True
     
 ### Plots 
 # Produce plots in the terminal? True = y; False = n
-plot = True
+plot = False
