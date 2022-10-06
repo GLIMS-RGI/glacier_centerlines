@@ -243,32 +243,34 @@ def geoline_to_cls(lines):
 
 ################################################################
 all_centerlines = []
-sufix = '03' #,'00','01','02'
+#all_toghether = gpd.GeoDataFrame()
+
+#for sufix in ['00','01','02','03']:
+sufix= '00'
 
 # crate all RGI ids to loop:
 c=[]
-for i in np.arange(0,999+1):
+for i in np.arange(0,999 +1  ):
     a = '00' + str(i)
     a = a[-3:]
     aa = sufix + a
     c.append('RGI60-11.' + aa)
-    
 
 # loop over all glaciers
 coun = 0    
 for i, RGIid in enumerate(c):
-    i=i+2999
+    i=i -1 #+ 999
     print(RGIid), print(i)
     try:
 
-        print(RGIid)
+        print(f'RGIid: {RGIid}'), print(i)
         
         with tarfile.open(f"{data_path}/RGI60-11.{sufix}/{RGIid}.tar.gz") as inside:
-            print(inside)
+            #print(inside)
             inside.extract(f'{RGIid}/NASADEM/dem.tif')
+            #print(f'.{data_path}/RGI60-11.{sufix}/{RGIid}/NASADEM/dem.tif')
             data, pix_params = coordinate_change(f'./{RGIid}/NASADEM/dem.tif')
             dem = rio.open_rasterio(f'./{RGIid}/NASADEM/dem.tif')
-            
             # TODO: fix this
             # i didnt manage to open the nested tars so i delete the extracted one every time :(
             os.system(f'rm -rf {RGIid}')
@@ -290,14 +292,14 @@ for i, RGIid in enumerate(c):
         crop_extent=crop_extent[crop_extent['RGIId']==RGIid]
         
         crop_extent = crop_extent.to_crs(dem.rio.crs)
-        
+
         # Check that projection is in metre
         try:
             assert crop_extent.crs.axis_info[0].unit_name == 'metre'
                   
         except Exception:
             raise Exception('Projection from input shapefile data is not in meters.')
-        
+
         # # Check that projection is in metre
         # try:
         #     assert dem.rio.crs.data['units'] == 'm'
@@ -308,14 +310,14 @@ for i, RGIid in enumerate(c):
         # view all glaciers at once:
         if plot:
             crop_extent.plot()
-        
+
         # Get altitude and pixel info: 
         # altitude, (xorigin, yorigin, pixelH, pixelW)
         #data, pix_params = coordinate_change(f'./test_data/RGI60-11.00/{RGIid}/NASADEM/dem.tif')
 
         # select i-th glacier
         crp1 = crop_extent.iloc[[0]]
-        
+
         # crop the DEM to the outline + a few buffer points. Buffer in meters
         dem_clipped = dem.rio.clip(crp1.buffer(20).apply(shpg.mapping), 
                                    crop_extent.crs, drop=False)
@@ -331,15 +333,13 @@ for i, RGIid in enumerate(c):
         dem_clipped.values[0][dem_clipped.values[0] < 0 ] = -1
         dem_clipped.values[0][dem_clipped.values[0] > 8848 ] = -1                           
 
-        
+        print('problem here::::')
         # Determine heads and tails #
         area = crop_extent.geometry[i].area
 
-        
         # list of outline X,Y coordinates
         points_xy = crop_extent.geometry.exterior[i].coords
 
-        
         # Circular outline: if the first element is repeated at the end,
         # delete the last one
         if points_xy[0] == points_xy[-1]:
@@ -351,15 +351,21 @@ for i, RGIid in enumerate(c):
         
         # get terminus coordinates and position (index) in our data
         xyterm, ind_term = get_terminus_coord(points_xy, prof[1])
-        
+
         zoutline = prof[1]
-        
+
         # here heads start
         # create grid
         nx, ny = len(dem_clipped.x), len(dem_clipped.y)
-        #nx, ny = len(dem.x), len(dem.y)
-        
+
         ulx, uly, dx, dy = pix_params
+        
+        #radE = np.sqrt(1/((1/crop_extent.crs.ellipsoid.semi_major_metre)**2 + \
+        #                  (crop_extent.CenLat/crop_extent.crs.ellipsoid.semi_minor_metre)**2))
+            
+        #radE = float(radE)
+ 
+        ulx = ulx #+ crop_extent.CenLon * np.pi * 138689.4378770033/180 #radE/180
         
         # Initial topmost-leftmost point
         # To pixel center coordinates
@@ -367,7 +373,7 @@ for i, RGIid in enumerate(c):
         
         # try the shapefile curent crs for the raster grid
         utm_proj = salem.check_crs(crop_extent.crs)
-        
+
         # build raster grid properties
         grid = salem.Grid(proj=utm_proj, nxny=(nx, ny), dxdy=(dx, -dy), x0y0=x0y0)
         
@@ -539,7 +545,7 @@ for i, RGIid in enumerate(c):
         liness = []
         for j, line in enumerate(lines):
             mm = 1 if j == (len(lines)-1) else 0
-        
+            
             ensure_exterior_match = True
             if ensure_exterior_match:
                 # Extend line at the start by 10
@@ -605,6 +611,7 @@ for i, RGIid in enumerate(c):
         #####
         
         cls_xy = []
+        #ulx = ulx + float(crop_extent.CenLon * np.pi * radE/180) #radE/180
         for li in cls:
             # ij_to_xy
             ii = np.array(li.line.xy[0])
@@ -620,21 +627,40 @@ for i, RGIid in enumerate(c):
             lxy = shpg.LineString(xy)
         
             cls_xy.append(lxy)
-           
+        
         #save_lines(cls_xy, out_path + "/11_rgi60_central_europe.shp", crop_extent.crs)
         #save_lines(cls_xy, f"./RGI_i.shp", crop_extent.crs)
         
         # 0 works only for sinlge flowline calculation
-        all_centerlines.append(cls_xy[0])
+        
+        aa = gpd.GeoSeries(cls_xy[0], crs = crop_extent.crs)
+        aaa = aa.geometry.to_crs('wgs84')
+        
+        all_centerlines.append(aaa)
+        # TODO: add to a dataframe instead of a list
+        
+        #print(crop_extent.CenLon)
+        #print(crop_extent.CenLat)
+
+        #print(y[0])
+        #a = gpd.GeoSeries(cls_xy[0], crs = crop_extent.crs)
+        #save_lines([cls_xy[0]], f"RGI-11-{sufix}/{RGIid}.shp", crop_extent.crs)
 
     except:
         # raise Exception("There is a problem when computing
         # the least-cost route")
-    
         coun += 1
+        
+    #print(crop_extent.crs.ellipsoid.semi_minor_metre)
+    #print(crop_extent.crs.ellipsoid.semi_major_metre)
+    #save_lines([cls_xy[0]], f"RGI-11-{sufix}/{RGIid}.shp", crop_extent.crs)
 
+aaaa = gpd.GeoDataFrame(all_centerlines)
+aaaa['geometry'] = aaaa[0]; del aaaa[0]
 
-save_lines(all_centerlines, f"RGI-11-{sufix}.shp", crop_extent.crs)
+aaaa.to_file(f"RGI-11-{sufix}.shp")
+#save_lines(all_centerlines, f"RGI-11-{sufix}.shp", aaa.crs)
+#all_toghether = gpd.GeoDataFrame(geometry=all_centerlines)
 
 length=0
 for a in all_centerlines:
@@ -695,3 +721,6 @@ plt.colorbar()
 
 plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
             marker="*", s=100, c="g")
+
+print('Number of glaciers not been able to compute:')
+print(coun)
