@@ -592,12 +592,12 @@ if plot:  # (this is provisional, for checking urposes only)
     # plot profile
     # plot profile + terminus + heads:
     # NOTE: in this plot, removed heads are displayed anyway.
-    plt.plot(prof[0], zoutline, '-+')   # horizontal distance vs altitude
+    plt.plot(prof[0], zoutline, '-')   # horizontal distance vs altitude
     plt.plot(prof[0][ind_term], zoutline[ind_term],
-             'r*', label="terminus")  # terminus
+             'r*', markersize=18,label="terminus")  # terminus
     plt.plot(prof[0][heads_idx], zoutline[heads_idx],
-             'g*', label="head")  # head
-    plt.xlabel("Distance along outline (a.u.)")
+             'g*', markersize=18,label="head")  # head
+    plt.xlabel("Distance along outline (m)")
     plt.ylabel("Altitude (m)")
     plt.legend()
     plt.show()
@@ -610,6 +610,12 @@ if plot:  # (this is provisional, for checking urposes only)
     plt.scatter(xyterm.x, xyterm.y, marker="*", s=1000, c="r")
     crp1.boundary.plot(ax=ax)
     plt.show()
+
+    plt.imshow(np.clip(min(costgrid.flatten()),10000000000000,costgrid[195:325,785:850]))
+    plt.scatter(30, 105, marker="*", s=200, c="g", label='head')
+    plt.scatter(43, 5, marker="*", s=200, c="r", label='terminus')
+    plt.legend()
+
 
     # plot costgrid
     plt.imshow(costgrid)
@@ -630,11 +636,30 @@ if plot:  # (this is provisional, for checking urposes only)
         plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o",
                     s=5000/(nx*ny), c="y")
     plt.show()
+    
+    
+    
+    
+    
+    # plot costgrid
+    plt.imshow(np.clip(min(costgrid.flatten()),10000000000000,costgrid[195:325,785:850]))
+    plt.colorbar()
+
+   # plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
+   #             marker="*", s=100, c="g")
+    if len(lines) > 1:
+        a=3
+#        plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1],
+#                    marker="*", s=100, c="g")
+#    plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*",
+#                s=100, c="r")
+
+    plt.scatter(np.array(lines[0].xy[1])-240, np.array(lines[0].xy[0])-760, marker="o",
+                s=5000000/(nx*ny), c="r")
+
+  #  for lin in np.arange(len(lines)):
+  #      plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o",
+  #                  s=5000/(nx*ny), c="y")
+    plt.show()
 ##############################################################
 # END #
-
-plt.imshow(costgrid)
-plt.colorbar()
-
-plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
-            marker="*", s=100, c="g")

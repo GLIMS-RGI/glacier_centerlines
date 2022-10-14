@@ -28,6 +28,7 @@ def coordinate_change(tif_path):
     Raster values and raster parameters (xOrigin, yOrigin, pixelHeight,
                                          pixelWidth)
     """
+    #crop_extent.crs.to_epsg(4326)
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)
 
@@ -181,7 +182,7 @@ def _make_costgrid(mask, ext, z):
     # Kienholz et al eq (2)
     f1 = 1000.
     f2 = 3000.
-    a = 4.25
+    a = 4.25 #literature
     b = 3.7
 
     dis = np.where(mask, distance_transform_edt(mask), np.NaN)

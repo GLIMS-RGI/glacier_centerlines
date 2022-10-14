@@ -18,12 +18,12 @@ out_path = "/home/francesc/results/glacier_centerlines/"
 
 # RGI11
 data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
-#dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
-#shape_file = "11_rgi60_CentralEurope.shp"
+dem_file = 'dummy'#'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
+shape_file = "11_rgi60_CentralEurope.shp"
 
 #data_path = "/home/francesc/repositories/glacier_centerlines/test_data/"
-dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
-shape_file = "11_rgi60_CentralEurope.shp"
+#dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
+#shape_file = "11_rgi60_CentralEurope.shp"
 
 
 ### Input/Output paths. Set to ~ to default to home directory
@@ -101,10 +101,10 @@ q1 = 2e-6
 q2 = 500.
 rmax = 1000.
 
-# Kienholz et al eq (2)
+# Kienholz et al eq (2) --> it is hardcoded in _make_costgrid() function!
 f1 = 1000.
 f2 = 3000.
-a = 4.25
+a = 4.25 #4.25 in literature
 b = 3.7
 
 # Kienholz et al eq (8) but modified here
@@ -173,7 +173,7 @@ store_model_geometry = False
 
 # Single flow: if True, a single, principal flowline is computed. 
 # If False, tributaries are also computed.
-single_fl = True
+single_fl = False
     
 ### Plots 
 # Produce plots in the terminal? True = y; False = n
