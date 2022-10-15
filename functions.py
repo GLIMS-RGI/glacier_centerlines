@@ -28,6 +28,7 @@ def coordinate_change(tif_path):
     Raster values and raster parameters (xOrigin, yOrigin, pixelHeight,
                                          pixelWidth)
     """
+    #crop_extent.crs.to_epsg(4326)
     dataset = gdal.Open(tif_path)
     band = dataset.GetRasterBand(1)
 
@@ -48,7 +49,7 @@ def coordinate_change(tif_path):
     return data, pix_params
 
 
-def profile(points_yx, data, pix_params):
+def profile(points_xy, data, pix_params):
     """
     Parameters
     ----------
@@ -72,7 +73,7 @@ def profile(points_yx, data, pix_params):
     xOrigin, yOrigin, pixelHeight, pixelWidth = pix_params
 
     # altitude
-    for point in points_yx:
+    for point in points_xy:
         col = int((point[0] - xOrigin) / pixelWidth)
         row = int((yOrigin - point[1]) / pixelHeight)
 
@@ -87,14 +88,14 @@ def profile(points_yx, data, pix_params):
     # repeat the first point at the end
     # np.append(points_list, points_list[0])
 
-    for i in np.arange(len(points_yx)):
+    for i in np.arange(len(points_xy)):
         i = int(i)
-        a = shpg.Point(points_yx[i])
+        a = shpg.Point(points_xy[i])
         # last point
-        if i == len(points_yx)-1:
-            d = a.distance(shpg.Point(points_yx[0]))
+        if i == len(points_xy)-1:
+            d = a.distance(shpg.Point(points_xy[0]))
         else:
-            d = a.distance(shpg.Point(points_yx[i+1]))
+            d = a.distance(shpg.Point(points_xy[i+1]))
         dumdist = dumdist + d
         dist = np.append(dist, dumdist)
 
@@ -181,7 +182,7 @@ def _make_costgrid(mask, ext, z):
     # Kienholz et al eq (2)
     f1 = 1000.
     f2 = 3000.
-    a = 4.25
+    a = 4.25 #literature
     b = 3.7
 
     dis = np.where(mask, distance_transform_edt(mask), np.NaN)

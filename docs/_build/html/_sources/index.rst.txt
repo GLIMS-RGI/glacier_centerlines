@@ -14,14 +14,18 @@ Core principles and structure of the OGGM modelling framework.
 * :doc:`introduction`
 * :doc:`flowlines`
 * :doc:`code`
+* :doc:`RGI11_comparison` **NEW! (14102022)**
+
+
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
     :hidden:
-    :caption: Principles
+    :caption: GoTo:
 
     introduction.rst
     flowlines.rst
     code.rst
+    RGI11_comparison.rst
     
 
