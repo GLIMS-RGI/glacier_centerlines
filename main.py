@@ -8,18 +8,13 @@ https://tc.copernicus.org/articles/8/503/2014/
 import numpy as np
 import scipy
 import utils as utils
-from utils import lazy_property
-from utils import _filter_heads
 import salem
 import shapely.geometry as shpg
-import matplotlib.pyplot as plt
 import os
 import rioxarray as rio
 import geopandas as gpd
 from shapely.ops import transform as shp_trafo
 import shapely.affinity as shpa
-import shapely.ops as shpo
-import tarfile
 
 try:
     import skimage.draw as skdraw
@@ -37,16 +32,16 @@ except AttributeError:
     from scipy.signal import gaussian
 # ------------------------ Import functions ---------
 from functions import (get_terminus_coord, profile, coordinate_change,
-                       _make_costgrid, _polygon_to_pix, _filter_lines,
-                       _filter_lines_slope, _normalize,
-                       _projection_point, line_order, gaussian_blur,
-                       _chaikins_corner_cutting, save_lines)
+                       _make_costgrid,_filter_lines_slope
+                       ) # TODO: make costgrid has some issue when importing it from OGGM because I dont have the same params.py file\
+    #idem for _filter_lines_slope
+                       
+from oggm.core.gis import (_polygon_to_pix, gaussian_blur)
+from oggm.core.centerlines import (line_order, _filter_lines)
+from oggm.utils._workflow import _chaikins_corner_cutting
 
 # load parameters to be used (more info in params.py)
 import params
-
-# load class
-from utils import SuperclassMeta
 
 ############################################################
 # TODO: ? parse params as in OGGM cfg.PARAMS('parameter-name')
@@ -79,144 +74,13 @@ single_fl = params.single_fl
 #     GAUSSIAN_KERNEL[ks] = kernel / kernel.sum()
 
 
-##################################################################
-# Light version of Centerline class from OGGM
-class Centerline(object, metaclass=SuperclassMeta):
-    """Geometry (line and widths) and flow rooting properties, but no thickness
-    """
-
-    def __init__(self, line, dx=None, surface_h=None, orig_head=None,
-                  rgi_id=None, map_dx=None):
-        """ Initialize a Centerline
-        Parameters
-        ----------
-        line : :py:class:`shapely.geometry.LineString`
-            The geometrically calculated centerline
-        dx : float
-            Grid spacing of the initialised flowline in pixel coordinates
-        surface_h :  :py:class:`numpy.ndarray`
-            elevation [m] of the points on ``line``
-        orig_head : :py:class:`shapely.geometry.Point`
-            geometric point of the lines head
-        rgi_id : str
-            The glacier's RGI identifier
-        map_dx : float
-            the map's grid resolution. Centerline.dx_meter = dx * map_dx
-        """
-
-        self.line = None  # Shapely LineString
-        self.head = None  # Shapely Point
-        self.tail = None  # Shapely Point
-        self.dis_on_line = None
-        self.nx = None
-        if line is not None:
-            self.set_line(line)  # Init all previous properties
-        else:
-            self.nx = len(surface_h)
-            self.dis_on_line = np.arange(self.nx) * dx
-
-        self.order = None  # Hydrological flow level (~ Strahler number)
-
-        # These are computed at run time by compute_centerlines
-        self.flows_to = None  # pointer to a Centerline object (when available)
-        self.flows_to_point = None  # point of the junction in flows_to
-        self.inflows = []  # list of Centerline instances (when available)
-        self.inflow_points = []  # junction points
-
-        # Optional attrs
-        self.dx = dx  # dx in pixels (assumes the line is on constant dx
-        self.map_dx = map_dx  # the pixel spacing
-        try:
-            self.dx_meter = self.dx * self.map_dx
-        except TypeError:
-            # For backwards compatibility we allow this for now
-            self.dx_meter = None
-        self._surface_h = surface_h
-        self._widths = None
-        self.is_rectangular = None
-        self.is_trapezoid = None
-        self.orig_head = orig_head  # Useful for debugging and for filtering
-        self.geometrical_widths = None  # these are kept for plotting and such
-        self.apparent_mb = None  # Apparent MB, NOT weighted by width.
-        self.mu_star = None  # the mu* associated with the apparent mb
-        self.mu_star_is_valid = False  # if mu* leeds to good flux, keep it
-        self.flux = None  # Flux (kg m-2)
-        self.flux_needs_correction = False  # whether this branch was baaad
-        self.rgi_id = rgi_id  # Useful if line is used with another glacier
-
-
-    def set_line(self, line):
-        """Update the Shapely LineString coordinate.
-        Parameters
-        ----------
-        line : :py:class`shapely.geometry.LineString`
-        """
-
-        self.nx = len(line.coords)
-        self.line = line
-        dis = [line.project(shpg.Point(co)) for co in line.coords]
-        self.dis_on_line = np.array(dis)
-        xx, yy = line.xy
-        self.head = shpg.Point(xx[0], yy[0])
-        self.tail = shpg.Point(xx[-1], yy[-1])
-
-
-
 # class defined to be able to use some functions from OGGM "as they are".
 class glacier_dir(object):
     def __init__(self, grid):
         self.grid = grid
+        self.sourceDem = os.path.join( f'{data_path}', f'{dem_file}')
+        self.sourceOutline = os.path.join( f'{data_path}', f'{shape_file}')
 
-
-class grid_inf(object):
-    def __init__(self, grid):
-        self.grid = grid
-
-     
-def cls_intersec_outline(cls, outline):
-    """
-    fine tunning: flowlines must finish onto an outline
-
-    Parameters
-    ----------
-    lines : list of centerline instances
-        flowlines
-    outline : shapely.geometry.polygon.Polygon in raster coordinates
-        glacier boundaries
-
-    Returns
-    -------
-    modified lines, in form of shapely.lines list (?)
-
-    """
-    lis = []
-    for li in cls:
-        bbb = shpo.split(li.line, outline)
-        print(len(bbb.geoms))
-        print(li.line.length)
-        print(len(bbb.geoms))
-        if len(bbb.geoms) != 1:
-            
-            if len(bbb.geoms) == 2: #intersect head only
-                ind=np.argmax([bbb.geoms[0].length, bbb.geoms[1].length])
-                print(list(bbb.geoms))
-                lis.append(bbb.geoms[ind])
-            
-            elif len(bbb.geoms) == 3: # intersect in the head and tail both
-                 ind=np.argmax([bbb.geoms[0].length, 
-                                bbb.geoms[1].length,
-                                bbb.geoms[2].length])
-                 lis.append(bbb.geoms[ind])
-
-            else:
-                 print("Some centerline crosses the outline \
-                                 more than 2 times")
-        else:
-            lis.append(li.line)
-            
-    return lis
-
-    
 ##################
 # move this to utils:
     
@@ -236,7 +100,7 @@ def geoline_to_cls(lines):
     """
     clss = []
     for li in lines:
-        clss.append(Centerline(li))
+        clss.append(utils.Centerline(li))
     cls = clss
     return cls
 
@@ -396,7 +260,7 @@ glacier_poly_hr = crop_extent.geometry[0]
 
 
 # heads' coordinates and altitude
-heads, heads_z = _filter_heads(heads, list(heads_z), float(radius),
+heads, heads_z = utils._filter_heads(heads, list(heads_z), float(radius),
                                glacier_poly_hr)
 
 # after head filtering, refill heads xy coordinates:
@@ -560,13 +424,7 @@ cls = []
 for k in np.argsort([cl.order for cl in olines]):
     cls.append(olines[k])
 
-
-##### this can be used to check if all centerlines finish over the outlines
-#lines = cls_intersec_outline(cls, exterior)
-
-#cls = geoline_to_cls(lines)
 #####
-
 cls_xy = []
 for li in cls:
     # ij_to_xy
@@ -584,82 +442,24 @@ for li in cls:
 
     cls_xy.append(lxy)
    
-#save_lines(cls_xy, out_path + "/flowlines.shp", crop_extent.crs)
-save_lines(cls_xy,"flowlines.shp", crop_extent.crs)
+#Convert to multiline
+if len(cls_xy) > 1:
+    cls_xy = shpg.MultiLineString(cls_xy)
 
-###############################################################
-if plot:  # (this is provisional, for checking urposes only)
-    # plot profile
-    # plot profile + terminus + heads:
-    # NOTE: in this plot, removed heads are displayed anyway.
-    plt.plot(prof[0], zoutline, '-')   # horizontal distance vs altitude
-    plt.plot(prof[0][ind_term], zoutline[ind_term],
-             'r*', markersize=18,label="terminus")  # terminus
-    plt.plot(prof[0][heads_idx], zoutline[heads_idx],
-             'g*', markersize=18,label="head")  # head
-    plt.xlabel("Distance along outline (m)")
-    plt.ylabel("Altitude (m)")
-    plt.legend()
-    plt.show()
+# convert to geopandas datagrame to save afterwards
+cls_xy_gpd = gpd.GeoDataFrame(cls_xy)
+cls_xy_gpd['geometry'] = cls_xy_gpd[0]; del cls_xy_gpd[0]
 
-    # plot altitude raster
-    f, ax = plt.subplots(figsize=(8, 10))
-    dem_clipped.plot(ax=ax)
-    ax.set(title="Raster Layer Cropped to Geodataframe Extent")
-    plt.scatter(headsx, headsy, marker="*", s=1000, c="g")
-    plt.scatter(xyterm.x, xyterm.y, marker="*", s=1000, c="r")
-    crp1.boundary.plot(ax=ax)
-    plt.show()
+# add some metadata
+cls_xy_gpd['src_files'] = os.path.join(f'{gdir.sourceDem}',f'{gdir.sourceOutline}')
 
-    plt.imshow(np.clip(min(costgrid.flatten()),10000000000000,costgrid[195:325,785:850]))
-    plt.scatter(30, 105, marker="*", s=200, c="g", label='head')
-    plt.scatter(43, 5, marker="*", s=200, c="r", label='terminus')
-    plt.legend()
+if single_fl:
+    fileout = 'main_flowline' 
+else:
+    fileout = 'flowlines' 
+ 
+# save
+cls_xy_gpd.to_file(os.path.join(f"{out_path}", f"{fileout}.shp"))
 
-
-    # plot costgrid
-    plt.imshow(costgrid)
-    plt.colorbar()
-
-    plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
-                marker="*", s=100, c="g")
-    if len(lines) > 1:
-        plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1],
-                    marker="*", s=100, c="g")
-    plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*",
-                s=100, c="r")
-
-    plt.scatter(lines[0].xy[0], lines[0].xy[1], marker="o",
-                s=5000/(nx*ny), c="y")
-
-    for lin in np.arange(len(lines)):
-        plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o",
-                    s=5000/(nx*ny), c="y")
-    plt.show()
-    
-    
-    
-    
-    
-    # plot costgrid
-    plt.imshow(np.clip(min(costgrid.flatten()),10000000000000,costgrid[195:325,785:850]))
-    plt.colorbar()
-
-   # plt.scatter(heads_pix[0].xy[0], heads_pix[0].xy[1],
-   #             marker="*", s=100, c="g")
-    if len(lines) > 1:
-        a=3
-#        plt.scatter(heads_pix[1].xy[0], heads_pix[1].xy[1],
-#                    marker="*", s=100, c="g")
-#    plt.scatter(t_coord_pix[0], t_coord_pix[1], marker="*",
-#                s=100, c="r")
-
-    plt.scatter(np.array(lines[0].xy[1])-240, np.array(lines[0].xy[0])-760, marker="o",
-                s=5000000/(nx*ny), c="r")
-
-  #  for lin in np.arange(len(lines)):
-  #      plt.scatter(lines[lin].xy[0], lines[lin].xy[1], marker="o",
-  #                  s=5000/(nx*ny), c="y")
-    plt.show()
 ##############################################################
 # END #

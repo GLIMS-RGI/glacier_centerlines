@@ -7,9 +7,9 @@ is_first_call = False
 out_path = "/home/francesc/results/glacier_centerlines/"
 
 # Baltoro test data
-#data_path = "./test_data/"
-#dem_file = "dem_balto_tm.tif"
-#shape_file = "outlines.shp"
+data_path = "./test_data/"
+dem_file = "dem_balto_tm.tif"
+shape_file = "outlines.shp"
 
 # Norway test data
 #dem_file = "Norway_DEM_sel.tif"
@@ -17,9 +17,9 @@ out_path = "/home/francesc/results/glacier_centerlines/"
 #shape_file = "Norway_Inventory_sel/Norway_Inventory_sel.shp"
 
 # RGI11
-data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
-dem_file = 'dummy'#'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
-shape_file = "11_rgi60_CentralEurope.shp"
+#data_path = "/home/francesc/data/OGGM/rgi/RGIV60/11_rgi60_CentralEurope/"
+#dem_file = 'dummy'#'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
+#shape_file = "11_rgi60_CentralEurope.shp"
 
 #data_path = "/home/francesc/repositories/glacier_centerlines/test_data/"
 #dem_file = 'RGI60-11.00/RGI60-11.00002/NASADEM/dem.tif'
@@ -89,8 +89,6 @@ localmax_window = 500. #In units of dx
 # Set to 0 for no smoothing
 smooth_window = 251.
 
-# Use multiple flowlines?
-use_multiple_flowlines = True
 
 # Kienholz et al eq (1)
 q1 = 2/10**6 # 1/m

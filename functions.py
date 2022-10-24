@@ -13,8 +13,7 @@ from scipy.interpolate import RegularGridInterpolator
 import copy
 from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
-import geopandas as gpd
-#from main import Centerline
+from params import (f1, f2, a, b)
 
 def coordinate_change(tif_path):
     """
@@ -76,7 +75,7 @@ def profile(points_xy, data, pix_params):
     for point in points_xy:
         col = int((point[0] - xOrigin) / pixelWidth)
         row = int((yOrigin - point[1]) / pixelHeight)
-
+        
         alt = np.append(alt, data[row][col])
 
     # remove dummy 0 in the beginning
@@ -179,11 +178,11 @@ def _make_costgrid(mask, ext, z):
     -------
     numpy.array of the costgrid
     """
-    # Kienholz et al eq (2)
-    f1 = 1000.
-    f2 = 3000.
-    a = 4.25 #literature
-    b = 3.7
+#    # Kienholz et al eq (2)
+#    f1 = 1000.
+#    f2 = 3000.
+#    a = 4.25 #literature
+#    b = 3.7
 
     dis = np.where(mask, distance_transform_edt(mask), np.NaN)
     z = np.where(mask, z, np.NaN)
@@ -193,171 +192,12 @@ def _make_costgrid(mask, ext, z):
     zmin = np.nanmin(z)
     cost = ((dmax - dis) / dmax * f1) ** a + \
            ((z - zmin) / (zmax - zmin) * f2) ** b
-#    cost = ((dmax - dis) / dmax * cfg.PARAMS['f1']) ** cfg.PARAMS['a'] + \
-#           ((z - zmin) / (zmax - zmin) * cfg.PARAMS['f2']) ** cfg.PARAMS['b']
 
     # This is new: we make the cost to go over boundaries
     # arbitrary high to avoid the lines to jump over adjacent boundaries
     cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
-    # this works but makes the costgrid plot ugly + I dont get why are we
-    # doing it
-    # cost[np.where(ext)] = np.nanmax(cost[np.where(ext)]) * 50
-
+    # this works but makes the costgrid plot ugly 
     return np.where(mask, cost, np.Inf)
-
-
-def _polygon_to_pix(polygon):
-    """Transforms polygon coordinates to integer pixel coordinates. It makes
-    the geometry easier to handle and reduces the number of points.
-    Parameters
-    ----------
-    polygon: the shapely.geometry.Polygon instance to transform.
-    Returns
-    -------
-    a shapely.geometry.Polygon class instance.
-    """
-
-    def project(x, y):
-        return np.rint(x).astype(np.int64), np.rint(y).astype(np.int64)
-
-    def project_coarse(x, y, c=2):
-        return ((np.rint(x/c)*c).astype(np.int64),
-                (np.rint(y/c)*c).astype(np.int64))
-
-    poly_pix = shapely.ops.transform(project, polygon)
-
-    # simple trick to correct invalid polys:
-    tmp = poly_pix.buffer(0)
-
-    # try to deal with a bug in buffer where the corrected poly would be null
-    c = 2
-    while tmp.length == 0 and c < 7:
-        project = partial(project_coarse, c=c)
-        poly_pix = shapely.ops.transform(project_coarse, polygon)
-        tmp = poly_pix.buffer(0)
-        c += 1
-
-    # We tried all we could
-    if tmp.length == 0:
-        raise ValueError('This glacier geometry is not valid for OGGM.')
-
-    # sometimes the glacier gets cut out in parts
-    if tmp.type == 'MultiPolygon':
-        # If only small arms are cut out, remove them
-        area = np.array([_tmp.area for _tmp in tmp.geoms])
-        _tokeep = np.argmax(area).item()
-        tmp = tmp.geoms[_tokeep]
-
-        # check that the other parts really are small,
-        # otherwise replace tmp with something better
-        area = area / area[_tokeep]
-        for _a in area:
-            if _a != 1 and _a > 0.05:
-                # these are extremely thin glaciers
-                # eg. RGI40-11.01381 RGI40-11.01697 params.d1 = 5. and d2 = 8.
-                # make them bigger until its ok
-                for b in np.arange(0., 1., 0.01):
-                    tmp = shapely.ops.transform(project, polygon.buffer(b))
-                    tmp = tmp.buffer(0)
-                    if tmp.type == 'MultiPolygon':
-                        continue
-                    if tmp.is_valid:
-                        break
-                if b == 0.99:
-                    raise ValueError('This glacier geometry is not \
-                                     valid for OGGM.')
-    # TODO incorporate InvalidGeometryError
-
-    if not tmp.is_valid:
-        raise ValueError('This glacier geometry is not valid for OGGM.')
-    # TODO incorporate InvalidGeometryError
-
-    return tmp
-
-
-def _filter_lines(lines, heads, k, r):
-    """Filter the centerline candidates by length.
-    Kienholz et al. (2014), Ch. 4.3.1
-    Parameters
-    ----------
-    lines : list of shapely.geometry.LineString instances
-        The lines to filter out (in raster coordinates).
-    heads :  list of shapely.geometry.Point instances
-        The heads corresponding to the lines. (also in raster coordinates)
-    k : float
-        A buffer (in raster coordinates) to cut around the selected lines
-    r : float
-        The lines shorter than r will be filtered out.
-    Returns
-    -------
-    (lines, heads) a list of the new lines and corresponding heads
-    """
-
-    olines = []
-    oheads = []
-    ilines = copy.copy(lines)
-
-    lastline = None
-    while len(ilines) > 0:  # loop as long as we haven't filtered all lines
-        if len(olines) > 0:  # enter this after the first step only
-
-            toremove = lastline.buffer(k)  # buffer centerlines the last line
-            tokeep = []
-            for l in ilines:
-                # loop over all remaining lines and compute their diff
-                # to the last longest line
-                diff = l.difference(toremove)
-                if diff.type == 'MultiLineString':
-                    # Remove the lines that have no head
-                    diff = list(diff.geoms)
-                    for il in diff:
-                        hashead = False
-                        for h in heads:
-                            #if il.intersects(h): # after the smoothing the lines may not finish at the same point "head".
-                            #    hashead = True
-                            #    diff = il
-                                break
-                        if hashead:
-                            break
-                        else:
-                            diff = None
-                # keep this head line only if it's long enough
-                if diff is not None and diff.length > r:
-                    # Fun fact. The heads can be cut by the buffer too
-                    diff = shpg.LineString(l.coords[0:2] + diff.coords[2:])
-                    tokeep.append(diff)
-            ilines = tokeep
-        # it could happen that we're done at this point
-        if len(ilines) == 0:
-            break
-
-        # Otherwise keep the longest one and continue
-        lengths = np.array([])
-        for l in ilines:
-            lengths = np.append(lengths, l.length)
-        ll = ilines[np.argmax(lengths)]
-
-        ilines.remove(ll)
-        if len(olines) > 0:
-            # the cut line's last point is not guaranteed
-            # to on straight coordinates. Remove it
-            olines.append(shpg.LineString(np.asarray(ll.xy)[:, 0:-1].T))
-        else:
-            olines.append(ll)
-        lastline = ll
-
-    # add the corresponding head to each line
-    for l in olines:
-#        for h in heads:
-#            if l.intersects(h):
-#                oheads.append(h)
-#                break
-            oheads.append(l.coords[-1]) # assign first point as head of the centerline
-    print(len(oheads)) # --> here is the problem!!! there are only 12 heads that remain 
-    # in the same position after the smoothing! I dont know how to fix it. --> recompute heads?
-    print(len(olines))
-
-    return olines, oheads
 
 
 def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
@@ -395,7 +235,7 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
         points = line_interpol(line, dx_cls)
 
         # For tributaries, remove the tail
-        #points = points[0:-lid]
+        points = points[0:-lid]
 
         new_line = shpg.LineString(points)
 
@@ -448,24 +288,6 @@ def _projection_point(centerline, point):
     ind_closest = np.argmin(np.abs(centerline.dis_on_line - prdis)).item()
     flow_point = shpg.Point(centerline.line.coords[int(ind_closest)])
     return flow_point
-
-
-def line_order(line):
-    """Recursive search for the line's hydrological level.
-    Parameters
-    ----------
-    line: a Centerline instance
-    Returns
-    -------
-    The line's order
-    """
-
-    if len(line.inflows) == 0:
-        return 0
-    else:
-        levels = [line_order(s) for s in line.inflows]
-        return np.max(levels) + 1
-
 
 def line_interpol(line, dx):
     """Interpolates a shapely LineString to a regularly spaced one.
@@ -524,79 +346,3 @@ def line_interpol(line, dx):
         points.append(pbs[int(p[0])])
 
     return points
-
-
-def gaussian_blur(in_array, size):
-    """Applies a Gaussian filter to a 2d array.
-    Parameters
-    ----------
-    in_array : numpy.array
-        The array to smooth.
-    size : int
-        The half size of the smoothing window.
-    Returns
-    -------
-    a smoothed numpy.array
-    """
-
-    # expand in_array to fit edge of kernel
-    padded_array = np.pad(in_array, size, 'symmetric')
-
-    # build kernel
-    x, y = np.mgrid[-size:size + 1, -size:size + 1]
-    g = np.exp(-(x**2 / float(size) + y**2 / float(size)))
-    g = (g / g.sum()).astype(np.float)  # I had to change that
-
-    # do the Gaussian blur
-    return scipy.signal.fftconvolve(padded_array, g, mode='valid')
-
-
-def _chaikins_corner_cutting(line, refinements=5):
-    """Some magic here.
-    https://stackoverflow.com/questions/47068504/where-to-find-python-
-    implementation-of-chaikins-corner-cutting-algorithm
-    """
-    coords = np.array(line.coords)
-
-    for _ in range(refinements):
-        L = coords.repeat(2, axis=0)
-        R = np.empty_like(L)
-        R[0] = L[0]
-        R[2::2] = L[1:-1:2]
-        R[1:-1:2] = L[2::2]
-        R[-1] = L[-1]
-        coords = L * 0.75 + R * 0.25
-
-    return shpg.LineString(coords)
-
-
-def save_lines(lines, file_name, crs):
-    """
-    Given lines and a name of file, centerlines are saved as multiline.
-    
-    Parameters
-    ----------
-    lines : list of shapely.geometry.linestring.LineString
-        Centerlines coming from the centerline algorithm.
-    file_name : string
-        Name of file to be saved to.
-    crs : pyproj.crs.crs.CRS
-        projection to be saved to.
-        
-    Returns
-    -------
-    Saves file as 'file_name'. 
-
-    """
-    # save as shapefile
-    multilinec = shpg.MultiLineString(lines)  # lines merged in a multiline
-
-    # transform to geodataframe and save as shapefile
-    gpdmultil = gpd.GeoSeries(multilinec)
-    
-    # add crs
-    gpdmultil.crs = crs
-    
-    # save object
-    gpdmultil.to_file(driver='ESRI Shapefile',
-                      filename=file_name)
