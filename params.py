@@ -114,7 +114,7 @@ kbuffer = 1
 # Set to zero if no special treatment for water terminating glaciers should be
 # used, and to an integer > 0 to specify the percentile
 terminus_search_percentile = 10
-terminus_search_altitude_range = 100
+terminus_search_altitude_range = 20
 
 ### FLOWLINES definition parameters
 # Whether the model should use the glacier intersects information

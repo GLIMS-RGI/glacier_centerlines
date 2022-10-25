@@ -237,65 +237,6 @@ class Centerline(object, metaclass=SuperclassMeta):
         self.tail = shpg.Point(xx[-1], yy[-1])
 
 
-def line_interpol(line, dx):
-    """Interpolates a shapely LineString to a regularly spaced one.
-    Shapely's interpolate function does not guaranty equally
-    spaced points in space. This is what this function is for.
-    We construct new points on the line but at constant distance from the
-    preceding one.
-    Parameters
-    ----------
-    line: a shapely.geometry.LineString instance
-    dx: the spacing
-    Returns
-    -------
-    a list of equally distanced points
-    """
-
-    # First point is easy
-    points = [line.interpolate(dx / 2.)]
-
-    # Continue as long as line is not finished
-    while True:
-        pref = points[-1]
-        pbs = pref.buffer(dx).boundary.intersection(line)
-        if pbs.type == 'Point':
-            pbs = [pbs]
-        elif pbs.type == 'LineString':
-            # This is rare
-            pbs = [shpg.Point(c) for c in pbs.coords]
-            assert len(pbs) == 2
-        elif pbs.type == 'GeometryCollection':
-            # This is rare
-            opbs = []
-            for p in pbs.geoms:
-                if p.type == 'Point':
-                    opbs.append(p)
-                elif p.type == 'LineString':
-                    opbs.extend([shpg.Point(c) for c in p.coords])
-            pbs = opbs
-        else:
-            if pbs.type != 'MultiPoint':
-                raise RuntimeError('line_interpol: we expect a MultiPoint '
-                                   'but got a {}.'.format(pbs.type))
-
-        try:
-            # Shapely v2 compat
-            pbs = pbs.geoms
-        except AttributeError:
-            pass
-
-        # Out of the point(s) that we get, take the one farthest from the top
-        refdis = line.project(pref)
-        tdis = np.array([line.project(pb) for pb in pbs])
-        p = np.where(tdis > refdis)[0]
-        if len(p) == 0:
-            break
-        points.append(pbs[int(p[0])])
-
-    return points
-
-
 # A faster numpy.clip when only one value is clipped (here: min).
 clip_min = np.core.umath.maximum
 

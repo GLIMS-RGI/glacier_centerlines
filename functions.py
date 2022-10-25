@@ -13,7 +13,8 @@ from scipy.interpolate import RegularGridInterpolator
 import copy
 from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
-from params import (f1, f2, a, b)
+from params import (f1, f2, a, b, terminus_search_percentile,\
+                    terminus_search_altitude_range)
 
 def coordinate_change(tif_path):
     """
@@ -121,9 +122,11 @@ def get_terminus_coord(ext_yx, zoutline):
     # NOTE: possible problems in tidewater because of not constant distance
     # between points
 
-    perc = 10  # from oggm #cfg.PARAMS['terminus_search_percentile']
-    deltah = 20  # problem #50m(?)#cfg.PARAMS['terminus_search_altitude_range']
-
+    #perc = 10  # from oggm #cfg.PARAMS['terminus_search_percentile']
+    perc = terminus_search_percentile
+    #deltah = 20  # problem #50m(?)#cfg.PARAMS['terminus_search_altitude_range']
+    deltah = terminus_search_altitude_range
+    
     # if gdir.is_tidewater and (perc > 0):
     if min(zoutline) == 0 and perc > 0:
 
