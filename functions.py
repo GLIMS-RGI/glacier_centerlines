@@ -203,6 +203,91 @@ def _make_costgrid(mask, ext, z):
     return np.where(mask, cost, np.Inf)
 
 
+def _filter_lines(lines, heads, k, r):
+    """Filter the centerline candidates by length.
+    Kienholz et al. (2014), Ch. 4.3.1
+    Parameters
+    ----------
+    lines : list of shapely.geometry.LineString instances
+        The lines to filter out (in raster coordinates).
+    heads :  list of shapely.geometry.Point instances
+        The heads corresponding to the lines. (also in raster coordinates)
+    k : float
+        A buffer (in raster coordinates) to cut around the selected lines
+    r : float
+        The lines shorter than r will be filtered out.
+    Returns
+    -------
+    (lines, heads) a list of the new lines and corresponding heads
+    """
+
+    olines = []
+    oheads = []
+    ilines = copy.copy(lines)
+
+    lastline = None
+    while len(ilines) > 0:  # loop as long as we haven't filtered all lines
+        if len(olines) > 0:  # enter this after the first step only
+
+            toremove = lastline.buffer(k)  # buffer centerlines the last line
+            tokeep = []
+            for l in ilines:
+                # loop over all remaining lines and compute their diff
+                # to the last longest line
+                diff = l.difference(toremove)
+                if diff.type == 'MultiLineString':
+                    # Remove the lines that have no head
+                    diff = list(diff.geoms)
+                    for il in diff:
+                        hashead = False
+                        for h in heads:
+                            #if il.intersects(h): # after the smoothing the lines may not finish at the same point "head".
+                            #    hashead = True
+                            #    diff = il
+                                break
+                        if hashead:
+                            break
+                        else:
+                            diff = None
+                # keep this head line only if it's long enough
+                if diff is not None and diff.length > r:
+                    # Fun fact. The heads can be cut by the buffer too
+                    diff = shpg.LineString(l.coords[0:2] + diff.coords[2:])
+                    tokeep.append(diff)
+            ilines = tokeep
+        # it could happen that we're done at this point
+        if len(ilines) == 0:
+            break
+
+        # Otherwise keep the longest one and continue
+        lengths = np.array([])
+        for l in ilines:
+            lengths = np.append(lengths, l.length)
+        ll = ilines[np.argmax(lengths)]
+
+        ilines.remove(ll)
+        if len(olines) > 0:
+            # the cut line's last point is not guaranteed
+            # to on straight coordinates. Remove it
+            olines.append(shpg.LineString(np.asarray(ll.xy)[:, 0:-1].T))
+        else:
+            olines.append(ll)
+        lastline = ll
+
+    # add the corresponding head to each line
+    for l in olines:
+#        for h in heads:
+#            if l.intersects(h):
+#                oheads.append(h)
+#                break
+            oheads.append(l.coords[-1]) # assign first point as head of the centerline
+    print(len(oheads)) # --> here is the problem!!! there are only 12 heads that remain 
+    # in the same position after the smoothing! I dont know how to fix it. --> recompute heads?
+    print(len(olines))
+
+    return olines, oheads
+
+
 def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
     """Filter the centerline candidates by slope: if they go up, remove
     Kienholz et al. (2014), Ch. 4.3.1
@@ -254,8 +339,7 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
 
         # And altitude range
         z_range = np.max(hgts) - np.min(hgts)
-
-        # arbitrary threshold with which we filter the lines, otherwise bye bye
+       # arbitrary threshold with which we filter the lines, otherwise bye bye
         if np.sum(slope >= min_slope) >= 5 and z_range > 10:
             olines.append(line)
             oheads.append(head)
@@ -349,3 +433,28 @@ def line_interpol(line, dx):
         points.append(pbs[int(p[0])])
 
     return points
+
+def gaussian_blur(in_array, size):
+    """Applies a Gaussian filter to a 2d array.
+    Parameters
+    ----------
+    in_array : numpy.array
+        The array to smooth.
+    size : int
+        The half size of the smoothing window.
+    Returns
+    -------
+    a smoothed numpy.array
+    """
+
+    # expand in_array to fit edge of kernel
+    padded_array = np.pad(in_array, size, 'symmetric')
+
+    # build kernel
+    x, y = np.mgrid[-size:size + 1, -size:size + 1]
+    g = np.exp(-(x**2 / float(size) + y**2 / float(size)))
+    g = (g / g.sum()).astype(np.float)  # I had to change that
+
+    # do the Gaussian blur
+    return scipy.signal.fftconvolve(padded_array, g, mode='valid')
+
