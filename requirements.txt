@@ -1,0 +1,12 @@
+numpy
+scipy
+salem
+shapely
+os
+rioxarray as rio
+geopandas
+skimage
+oggm
+osgeo
+copy
+functools
