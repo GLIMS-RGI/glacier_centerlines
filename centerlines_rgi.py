@@ -33,7 +33,7 @@ from scipy.ndimage import (gaussian_filter1d, distance_transform_edt,
 
 # compute_centerlines_rgi
 import rioxarray as rio
-from functions_rgi import (get_terminus_coord, profile, coordinate_change,
+from glacier_centerlines.functions_rgi import (get_terminus_coord, profile, coordinate_change,
                        _make_costgrid,_filter_lines1,_filter_lines_slope1,
                        gaussian_blur, glacier_dir)
 from functools import partial
