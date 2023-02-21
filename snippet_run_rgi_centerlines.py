@@ -1,6 +1,8 @@
-#code snippet to try glaciercenterlines_rgi centerlines, that is now pip installable (pip install glacier_centelrines) git code in https://github.com/GLIMS-RGI/glacier_centerlines/tree/dev-entity_task
-# repo code in 
+#code snippet to try glaciercenterlines_rgi centerlines, that is now pip installable (pip install glacier_centelrines) 
 
+#code available in https://github.com/GLIMS-RGI/glacier_centerlines/tree/dev-entity_task
+
+#load libraries and oggm dependencies
 import os
 from oggm import cfg, utils
 cfg.initialize(logging_level='WARNING')
@@ -9,7 +11,7 @@ from oggm import workflow
 #set tmpdir
 cfg.PATHS['working_dir'] = utils.gettempdir(dirname='OGGM-new-cls', reset=False)
 
-# try hintereisferner
+# try hintereisferner, our beloved refference glacier in Tirol:
 rgi_ids = ['RGI60-11.00897']
 
 # bese url:
