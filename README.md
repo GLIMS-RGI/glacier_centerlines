@@ -30,3 +30,23 @@ The tools you will need:
 
 # UPDATE, version V1.0.2:
 See documentation in `\docs`
+
+# UPDATE pip installation
+Now the tool is [pip installable](https://pypi.org/project/glacier-centerlines/). 
+The tool has become an entity task that can be called using oggm already existing functions:
+
+(e.g. from `snippet_run_rgi_centerlines.py`)
+```
+#import general execution for oggm taks
+from oggm.workflow import execute_entity_task
+
+#new package where to take the task from:
+import glacier_centerlines as gc
+
+# run
+execute_entity_task(gc.centerlines_rgi.compute_centerlines_rgi, gdirs)
+
+``` 
+
+The new centerlines will be stored at the original oggm glacier directory as `centerlines_rgi.tar.gz
+`
