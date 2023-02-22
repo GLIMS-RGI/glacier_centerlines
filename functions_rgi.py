@@ -13,8 +13,29 @@ from scipy.interpolate import RegularGridInterpolator
 import copy
 from scipy.ndimage.filters import gaussian_filter1d
 from functools import partial
-from params import (f1, f2, a, b, terminus_search_percentile,\
-                    terminus_search_altitude_range)
+#from params import
+#import oggm.cfg as cfg
+
+#f1 = cfg.PARAMS['f1']
+#f2 = cfg.PARAMS['f2']
+#a = cfg.PARAMS['a']
+#b = cfg.PARAMS['b']
+f1 = 1000.
+f2 = 3000.
+a = 4.25 #4.25 in literature
+b = 3.7
+terminus_search_percentile = 10#cfg.PARAMS['terminus_search_percentile']
+terminus_search_altitude_range = 20#cfg.PARAMS['terminus_search_altitude_range']
+
+# class defined to be able to use some functions from OGGM "as they are".
+class glacier_dir(object):
+    def __init__(self, grid):
+        self.grid = grid
+
+
+##################
+# move this to utils:
+
 
 def coordinate_change(tif_path):
     """
@@ -203,7 +224,7 @@ def _make_costgrid(mask, ext, z):
     return np.where(mask, cost, np.Inf)
 
 
-def _filter_lines(lines, heads, k, r):
+def _filter_lines1(lines, heads, k, r):
     """Filter the centerline candidates by length.
     Kienholz et al. (2014), Ch. 4.3.1
     Parameters
@@ -288,7 +309,7 @@ def _filter_lines(lines, heads, k, r):
     return olines, oheads
 
 
-def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
+def _filter_lines_slope1(lines, heads, topo, gdir, min_slope):
     """Filter the centerline candidates by slope: if they go up, remove
     Kienholz et al. (2014), Ch. 4.3.1
     Parameters
@@ -302,10 +323,10 @@ def _filter_lines_slope(lines, heads, topo, gdir, min_slope):
     -------
     (lines, heads) a list of the new lines and corresponding heads
     """
-    import params
-    dx_cls = params.flowline_dx
-    lid = params.flowline_junction_pix
-    sw = params.flowline_height_smooth
+    #import params
+    dx_cls = 2#cfg.PARAMS['flowline_dx'] # probelm with the cfg imported here... idk how to do it
+    lid = 3#cfg.PARAMS['flowline_junction_pix']
+    sw = 1#cfg.PARAMS['flowline_height_smooth']
 
     # Bilinear interpolation
     # Geometries coordinates are in "pixel centered" convention, i.e

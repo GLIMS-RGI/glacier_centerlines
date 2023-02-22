@@ -1,0 +1,212 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+    <title>Glacier flowlines &#8212; glacier_centerlines 23-03-2022 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css" />
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Code" href="code.html" />
+    <link rel="prev" title="Introduction" href="introduction.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="glacier-flowlines">
+<span id="id1"></span><h1>Glacier flowlines<a class="headerlink" href="#glacier-flowlines" title="Permalink to this headline">¶</a></h1>
+<p>OGGM’s default model is a “flowline model”, which means that the glacier ice flow is
+assumed to happen along a representative “1.5D” flowline, as in the image
+below. “1.5D” here is used to emphasize that although glacier ice can flow
+only in one direction along the flowline, each point of the glacier has
+a geometrical width. This width means that flowline glaciers are able to match
+the observed area-elevation distribution of true glaciers, and can parametrize
+the changes in glacier width with thickness changes.</p>
+<figure class="align-left" id="id3">
+<a class="reference internal image-reference" href="_images/hef_flowline.jpg"><img alt="_images/hef_flowline.jpg" src="_images/hef_flowline.jpg" style="width: 80%;" /></a>
+<figcaption>
+<p><span class="caption-text">Example of a glacier flowline. Background image from
+<a class="reference external" href="http://www.swisseduc.ch/glaciers/alps/hintereisferner/index-de.html">http://www.swisseduc.ch/glaciers/alps/hintereisferner/index-de.html</a></span><a class="headerlink" href="#id3" title="Permalink to this image">¶</a></p>
+</figcaption>
+</figure>
+<section id="geometrical-centerlines">
+<h2>Geometrical centerlines<a class="headerlink" href="#geometrical-centerlines" title="Permalink to this headline">¶</a></h2>
+<section id="centerline-determination">
+<h3>Centerline determination<a class="headerlink" href="#centerline-determination" title="Permalink to this headline">¶</a></h3>
+<p>Our algorithm is an implementation of the procedure described by
+<a class="reference external" href="http://www.the-cryosphere.net/8/503/2014/">Kienholz et al., (2014)</a>. Apart from some minor changes (mostly the choice
+of some parameters), we stay close to the original algorithm.</p>
+<p>The basic idea is to find the terminus of the glacier (its lowest point) and
+a series of centerline “heads” (local elevation maxima). The centerlines are then
+computed with a least cost routing algorithm minimizing both (i) the total
+elevation gain and (ii) the distance to the glacier terminus.</p>
+<p>The glacier has a major centerline (the longest one), and
+tributary branches (in this case: two). The Hintereisferner glacier is a
+good example of a wrongly outlined glacier: the two northern glacier sub-catchments
+should have been classified as independent entities since they do not flow
+to the main flowline (more on this below).</p>
+<p>At this stage, the centerlines are still not fully suitable
+for modelling. Therefore, a rather simple
+procedure converts them to “flowlines”, which
+now have a regular grid spacing (which they will
+keep for the rest of the workflow). The tail of the tributaries are cut
+of before reaching the flowline they are tributing to:</p>
+<p>This step is needed to better represent glacier widths at flowline junctions.
+The empty circles on the main flowline indicate the location where the respective
+tributaries are connected (i.e. where the ice flux that is originating from the
+tributary will be added to the main flux when running the model dynamic).</p>
+</section>
+</section>
+<section id="pros-and-cons-of-both-methods">
+<span id="flprocons"></span><h2>Pros and cons of both methods<a class="headerlink" href="#pros-and-cons-of-both-methods" title="Permalink to this headline">¶</a></h2>
+<p>Flowline representation of the glacier is <strong>always</strong> a simplification!</p>
+<section id="id2">
+<h3>Geometrical centerlines<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h3>
+<ul class="simple">
+<li><p>Pros:</p>
+<ul>
+<li><p>Closer to the “true” length of the glacier.</p></li>
+<li><p>Grid points along the centerlines preserve their geometrical information,
+i.e. one can compute the exact location of ice thickness change.</p></li>
+<li><p>It is possible to have different model parameters for each flowline (e.g.
+different mass-balance models), although this is coming with its own
+challenges.</p></li>
+<li><p>Arguably: better suitability for mass-balance parameterizations taking
+glacier geometry and exposition into account.</p></li>
+<li><p>Arguably: better representation of the main glacier flow?</p></li>
+</ul>
+</li>
+<li><p>Cons:</p>
+<ul>
+<li><p>Complex and error prone: considerably more code than the elevation band
+flowlines.</p></li>
+<li><p>Less robust: more glaciers are failing in the preprocessing than with
+the simpler method.
+When glaciers are badly outlined (or worse, when ice caps are not
+properly divided), or with bad DEMs, the geometrical flowline
+can “look” very ugly.</p></li>
+<li><p>Computationally expensive (more grid points on average, more prone
+to numerical instabilities).</p></li>
+<li><p>Complex handling of mass-balance parameters for tributaries at the
+inversion (leading to multiple temperature sensitivity parameters
+for large glaciers).</p></li>
+<li><p>Related: <strong>all “new generation” mass-balance models in OGGM currently
+handle only a single flowline because of this complexity.</strong></p></li>
+</ul>
+</li>
+</ul>
+<div class="admonition-summary admonition">
+<p class="admonition-title"><strong>Summary</strong></p>
+<p><strong>When to use:</strong> when geometry matters, and when length is a important variable.
+For mountain glaciers (e.g. Alps, Himalayas). With the old mass-balance
+model.</p>
+<p><strong>When not to use:</strong> for ice caps, badly outlined glaciers, very large and
+flat glaciers, for global applications where geometrical details matters less.
+With the more fancy mass-balance models.</p>
+</div>
+</section>
+</section>
+<section id="references">
+<h2>References<a class="headerlink" href="#references" title="Permalink to this headline">¶</a></h2>
+<p>Kienholz, C., Rich, J. L., Arendt, A. A., and Hock, R.: A new method for deriving glacier centerlines applied to glaciers in Alaska and northwest Canada, The Cryosphere, 8, 503–519, <a class="reference external" href="https://doi.org/10.5194/tc-8-503-2014">https://doi.org/10.5194/tc-8-503-2014</a>, 2014.</p>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">glacier_centerlines</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">GoTo:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Glacier flowlines</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#geometrical-centerlines">Geometrical centerlines</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#pros-and-cons-of-both-methods">Pros and cons of both methods</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#references">References</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="code.html">Code</a></li>
+<li class="toctree-l1"><a class="reference internal" href="RGI11_comparison.html">RGI11-check</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="introduction.html" title="previous chapter">Introduction</a></li>
+      <li>Next: <a href="code.html" title="next chapter">Code</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2022, FRoura.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 4.4.0</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/flowlines.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

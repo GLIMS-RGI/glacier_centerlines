@@ -15,31 +15,38 @@ Here are two files to test things on:
 - https://cluster.klima.uni-bremen.de/~oggm/tutorials/Norway_Inventory_sel.zip
 - https://cluster.klima.uni-bremen.de/~oggm/tutorials/Norway_DEM_sel.tif
 
-There are no complex glaciers there. Instead, version v1.0.1 has been tested with Baltoro glacier (Test data in /test_data):
-
 Workflow:
 - assume that the DEM and the outlines are in a cartesian projection (units: m)
 - open the geotiff with rioxarray
 - start with one outline, and crop the DEM to the outline + a few grid point
-- compute a mask of the glacier as in: https://github.com/OGGM/oggm/blob/447a49d7f936dae4870453d7c65bf2c6f861d0d8/oggm/core/gis.py#L798
-- use the OGGM code to compute the heads, terminus, but: do not simplify geometries as done in OGGM. I would really try to see if its possible to work and compute glacier heads and terminus in the native geometry resolution. OGGM code: https://github.com/OGGM/oggm/blob/master/oggm/core/centerlines.py
-
-I don't think there is a need for the OGGM Centerline object. All calculations should be doable with shapely only.
+- compute a mask of the glacier.
+- use the OGGM code to compute the heads, terminus, without simplifying geometries as done in OGGM. 
 
 The tools you will need:
-
 - rioxarray to read geotiff
 - geopandas to read and write geometries
 - shapely to do the geometrical stuff (as OGGM does)
 - scipy for the routing algorithm (as OGGM does)
 
-# UPDATE, version V1.0.1:
-The structure is the same as in version v1.0.0, but several bugs have been fixed, as well as some other additional useful functions have been added, such as
-`utils.cls_to_geoline()`, `main.geoline_to_cls()`, `functions.save_lines()`. 
+# UPDATE, version V1.0.2:
+See documentation in `\docs`
 
-## Files:
-- `main.py` : contains all workflow
-- `functions.py` : contains most of the functions that have been taken from oggm plus some others that have been created additionally (`get_terminus()`, `profile()` and `coordinate_change()`)
-- `utils.py` : contains other code that is used mainly as a toolbox.
-- `params.py` : contains all the parameters used in `main.py` so there is no need to modify them in `main.py`
+# UPDATE pip installation
+Now the tool is [pip installable](https://pypi.org/project/glacier-centerlines/). 
+The tool has become an entity task that can be called using oggm already existing functions:
 
+(e.g. from `snippet_run_rgi_centerlines.py`)
+```
+#import general execution for oggm taks
+from oggm.workflow import execute_entity_task
+
+#new package where to take the task from:
+import glacier_centerlines as gc
+
+# run
+execute_entity_task(gc.centerlines_rgi.compute_centerlines_rgi, gdirs)
+
+``` 
+
+The new centerlines will be stored at the original oggm glacier directory as `centerlines_rgi.tar.gz
+`
